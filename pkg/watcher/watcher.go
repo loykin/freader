@@ -5,7 +5,9 @@ import (
 	"freader/pkg/file_tracker"
 	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -14,7 +16,6 @@ const FingerprintStrategyDeviceAndInode = "deviceAndInode"
 const DefaultFingerprintStrategySize = 1024
 
 type Watcher struct {
-	paths               []string
 	FingerprintStrategy string
 	FingerprintSize     int
 	interval            time.Duration
@@ -27,13 +28,16 @@ type Watcher struct {
 }
 
 func NewWatcher(config Config, cb func(id, path string), removeCb func(id string)) (*Watcher, error) {
-	for i := 0; i < len(config.Paths); i++ {
-		base := filepath.Clean(config.Paths[i])
-		for j := 0; j < len(config.Paths); j++ {
+	// Derive roots from include patterns (single unified concept).
+	paths := deriveScanRoots(config.Include)
+
+	for i := 0; i < len(paths); i++ {
+		base := filepath.Clean(paths[i])
+		for j := 0; j < len(paths); j++ {
 			if i == j {
 				continue
 			}
-			other := filepath.Clean(config.Paths[j])
+			other := filepath.Clean(paths[j])
 			if isSubPath(base, other) {
 				return nil, errors.New("overlapping watch paths: " + base + " is subpath of " + other)
 			}
@@ -52,7 +56,6 @@ func NewWatcher(config Config, cb func(id, path string), removeCb func(id string
 	}
 
 	return &Watcher{
-		paths:               config.Paths,
 		interval:            config.PollInterval,
 		callback:            cb,
 		FingerprintStrategy: config.FingerprintStrategy,
@@ -70,6 +73,9 @@ func (w *Watcher) Start() {
 
 	go func() {
 		defer ticker.Stop()
+
+		// Perform an immediate scan on start
+		w.scan()
 
 		for {
 			select {
@@ -89,8 +95,29 @@ func (w *Watcher) Stop() {
 func (w *Watcher) scan() {
 	existingFiles := make(map[string]bool)
 
-	for _, path := range w.paths {
-		err := filepath.Walk(path, func(p string, info fs.FileInfo, err error) error {
+	// Determine if there are specific include patterns (globs or exact files)
+	hasSpecific := false
+	for _, pattern := range w.include {
+		cp := filepath.Clean(pattern)
+		if hasMeta(cp) {
+			hasSpecific = true
+			break
+		}
+		if fi, err := os.Stat(cp); err != nil {
+			// Path does not exist: if no meta, treat as specific (likely a file name pattern)
+			hasSpecific = true
+			break
+		} else if !fi.IsDir() {
+			hasSpecific = true
+			break
+		}
+	}
+
+	// Derive roots dynamically from includes each scan (no persistent roots field)
+	roots := deriveScanRoots(w.include)
+
+	for _, root := range roots {
+		err := filepath.Walk(root, func(p string, info fs.FileInfo, err error) error {
 			if err != nil {
 				slog.Warn("failed to walk", "path", p, "error", err)
 				return nil
@@ -103,8 +130,35 @@ func (w *Watcher) scan() {
 			// Apply include/exclude filters
 			if len(w.include) > 0 {
 				matched := false
+				base := filepath.Base(p)
 				for _, pattern := range w.include {
-					if matched, _ = filepath.Match(pattern, filepath.Base(p)); matched {
+					cleanPat := filepath.Clean(pattern)
+					// Directory-like include (no glob)
+					if !hasMeta(cleanPat) {
+						if infoDir, err := os.Stat(cleanPat); (err == nil && infoDir.IsDir()) || strings.HasSuffix(pattern, string(filepath.Separator)) {
+							// If we also have specific includes (globs or exact files), ignore broad directory includes as filters
+							if !hasSpecific {
+								if isSubPath(p, strings.TrimSuffix(cleanPat, string(filepath.Separator))) {
+									matched = true
+									break
+								}
+							}
+						} else {
+							// Treat as exact file path match (support relative/absolute by cleaning both)
+							if filepath.Clean(p) == cleanPat || filepath.Base(p) == cleanPat {
+								matched = true
+								break
+							}
+						}
+						continue
+					}
+					// Glob patterns: match against base and full path
+					if ok, _ := filepath.Match(cleanPat, base); ok {
+						matched = true
+						break
+					}
+					if ok, _ := filepath.Match(cleanPat, p); ok {
+						matched = true
 						break
 					}
 				}
@@ -114,8 +168,12 @@ func (w *Watcher) scan() {
 			}
 
 			if len(w.exclude) > 0 {
+				base := filepath.Base(p)
 				for _, pattern := range w.exclude {
-					if matched, _ := filepath.Match(pattern, filepath.Base(p)); matched {
+					if ok, _ := filepath.Match(pattern, base); ok {
+						return nil
+					}
+					if ok, _ := filepath.Match(pattern, p); ok {
 						return nil
 					}
 				}
@@ -158,7 +216,7 @@ func (w *Watcher) scan() {
 			return nil
 		})
 		if err != nil {
-			slog.Error("failed to walk path", "path", path, "error", err)
+			slog.Error("failed to walk path", "path", root, "error", err)
 			continue
 		}
 	}

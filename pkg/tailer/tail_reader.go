@@ -124,9 +124,10 @@ func (t *TailReader) ReadOnce(callback func(string)) error {
 			}
 			return err
 		}
+		// Always advance offset for consumed chunk, even if it's just a separator (blank line)
+		t.Offset += int64(len(chunk))
 		if len(chunk) > 1 {
 			callback(string(chunk[:len(chunk)-1]))
-			t.Offset += int64(len(chunk))
 		}
 	}
 }

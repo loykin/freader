@@ -6,7 +6,6 @@ import (
 )
 
 type Config struct {
-	Paths               []string
 	PollInterval        time.Duration
 	FingerprintStrategy string
 	FingerprintSize     int

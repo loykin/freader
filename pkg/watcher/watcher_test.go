@@ -28,7 +28,7 @@ func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
 		{
 			name: "Valid DeviceAndInode Strategy",
 			config: Config{
-				Paths:               []string{"/tmp"},
+				Include:             []string{"/tmp"},
 				FingerprintStrategy: FingerprintStrategyDeviceAndInode,
 				FileTracker:         file_tracker.New(),
 			},
@@ -37,7 +37,7 @@ func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
 		{
 			name: "Valid Checksum Strategy",
 			config: Config{
-				Paths:               []string{"/tmp"},
+				Include:             []string{"/tmp"},
 				FingerprintStrategy: FingerprintStrategyChecksum,
 				FingerprintSize:     1024,
 				FileTracker:         file_tracker.New(),
@@ -47,7 +47,7 @@ func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
 		{
 			name: "Checksum Strategy with Invalid Size",
 			config: Config{
-				Paths:               []string{"/tmp"},
+				Include:             []string{"/tmp"},
 				FingerprintStrategy: FingerprintStrategyChecksum,
 				FingerprintSize:     0,
 				FileTracker:         file_tracker.New(),
@@ -58,7 +58,7 @@ func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
 		{
 			name: "Unsupported Strategy",
 			config: Config{
-				Paths:               []string{"/tmp"},
+				Include:             []string{"/tmp"},
 				FingerprintStrategy: "invalid",
 				FileTracker:         file_tracker.New(),
 			},
@@ -85,7 +85,7 @@ func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
 
 func TestWatcher_StartStop(t *testing.T) {
 	config := Config{
-		Paths:               []string{t.TempDir()},
+		Include:             []string{t.TempDir()},
 		PollInterval:        10 * time.Millisecond,
 		FingerprintStrategy: FingerprintStrategyDeviceAndInode,
 		FileTracker:         file_tracker.New(),
@@ -150,7 +150,7 @@ func TestWatcher_PathValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := Config{
-				Paths:               tt.paths,
+				Include:             tt.paths,
 				FingerprintStrategy: FingerprintStrategyDeviceAndInode,
 				FileTracker:         file_tracker.New(),
 			}
@@ -222,10 +222,9 @@ func TestWatcher_IncludeExcludeFilters(t *testing.T) {
 
 			// Setup watcher
 			config := Config{
-				Paths:               []string{tempDir},
+				Include:             append([]string{tempDir}, tt.include...),
 				PollInterval:        10 * time.Millisecond,
 				FingerprintStrategy: FingerprintStrategyDeviceAndInode,
-				Include:             tt.include,
 				Exclude:             tt.exclude,
 				FileTracker:         file_tracker.New(),
 			}

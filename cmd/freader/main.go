@@ -26,7 +26,7 @@ Examples:
   freader
 
   # Monitor multiple directories with custom poll interval
-  freader --paths ./log,/var/log --poll-interval 5s
+  freader --include ./log,/var/log --poll-interval 5s
 
   # Output to a file instead of stdout
   freader --output-type file --output /tmp/output.log
@@ -61,11 +61,13 @@ func runCollector(config *Config) error {
 	// Create configuration
 	cfg := collector.Config{}
 	cfg.Default()
-	cfg.Paths = config.Paths
+	// Use include-only filtering
+	cfg.Include = config.Include
 	cfg.FingerprintSize = config.FingerprintSize
 	cfg.PollInterval = config.PollInterval
 	cfg.FingerprintStrategy = config.FingerprintStrategy
 	cfg.WorkerCount = config.WorkerCount
+	cfg.Exclude = config.Exclude
 	cfg.OnLineFunc = func(line string) {
 		_, err := fmt.Fprintln(output, line)
 		if err != nil {

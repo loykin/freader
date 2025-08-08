@@ -13,7 +13,8 @@ import (
 // Config holds all configuration options for the freader application
 type Config struct {
 	// File monitoring options
-	Paths               []string
+	Include             []string
+	Exclude             []string
 	PollInterval        time.Duration
 	FingerprintSize     int
 	FingerprintStrategy string
@@ -27,7 +28,8 @@ type Config struct {
 // DefaultConfig returns a Config with default values
 func DefaultConfig() *Config {
 	return &Config{
-		Paths:               []string{"./log"},
+		Include:             []string{"./log"},
+		Exclude:             []string{},
 		PollInterval:        2 * time.Second,
 		FingerprintSize:     1024,
 		FingerprintStrategy: "checksum",
@@ -38,7 +40,8 @@ func DefaultConfig() *Config {
 
 // SetupFlags adds all command line flags to the provided cobra command
 func (c *Config) SetupFlags(cmd *cobra.Command) {
-	cmd.Flags().StringSliceVarP(&c.Paths, "paths", "p", c.Paths, "Paths to monitor for files")
+	cmd.Flags().StringSliceVarP(&c.Include, "include", "I", c.Include, "Include patterns or directories to monitor (e.g., ./log, /var/log/*.log)")
+	cmd.Flags().StringSliceVarP(&c.Exclude, "exclude", "E", c.Exclude, "Exclude patterns (e.g., *.tmp, *.log)")
 	cmd.Flags().DurationVarP(&c.PollInterval, "poll-interval", "i", c.PollInterval, "Interval to poll for file changes")
 	cmd.Flags().IntVarP(&c.FingerprintSize, "fingerprint-size", "s", c.FingerprintSize, "Size of fingerprint for checksum strategy")
 	cmd.Flags().StringVarP(&c.FingerprintStrategy, "fingerprint-strategy", "f", c.FingerprintStrategy,

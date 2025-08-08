@@ -26,7 +26,7 @@ func TestCollector_Integration(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
+			Include:             []string{tempDir},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           '\n',
@@ -87,7 +87,7 @@ func TestCollector_Integration(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
+			Include:             []string{tempDir},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           '\n',
@@ -139,7 +139,7 @@ func TestCollector_MultipleFiles(t *testing.T) {
 	var mu sync.Mutex
 
 	cfg := Config{
-		Paths:               []string{tempDir},
+		Include:             []string{tempDir},
 		PollInterval:        100 * time.Millisecond,
 		WorkerCount:         2,
 		Separator:           '\n',
@@ -155,7 +155,22 @@ func TestCollector_MultipleFiles(t *testing.T) {
 	assert.NoError(t, err)
 
 	collector.Start()
-	time.Sleep(500 * time.Millisecond)
+	// Wait until all three files are read (expect 6 lines) or timeout
+	deadline := time.After(2 * time.Second)
+	for {
+		mu.Lock()
+		count := len(lines)
+		mu.Unlock()
+		if count >= 6 {
+			break
+		}
+		select {
+		case <-deadline:
+			break
+		default:
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
 
 	mu.Lock()
 	assert.Contains(t, lines, "content1-1")
@@ -179,7 +194,7 @@ func TestCollector_FileRemoval(t *testing.T) {
 	var mu sync.Mutex
 
 	cfg := Config{
-		Paths:               []string{tempDir},
+		Include:             []string{tempDir},
 		PollInterval:        100 * time.Millisecond,
 		WorkerCount:         1,
 		Separator:           '\n',
@@ -215,7 +230,7 @@ func TestCollector_FileRemoval(t *testing.T) {
 func TestCollector_ErrorCases(t *testing.T) {
 	t.Run("Invalid Directory", func(t *testing.T) {
 		cfg := Config{
-			Paths:               []string{"/nonexistent/path"},
+			Include:             []string{"/nonexistent/path"},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
@@ -232,7 +247,7 @@ func TestCollector_ErrorCases(t *testing.T) {
 
 	t.Run("Invalid Fingerprint Strategy", func(t *testing.T) {
 		cfg := Config{
-			Paths:               []string{t.TempDir()},
+			Include:             []string{t.TempDir()},
 			FingerprintStrategy: "invalid",
 		}
 
@@ -242,7 +257,7 @@ func TestCollector_ErrorCases(t *testing.T) {
 
 	t.Run("Checksum Strategy Size Validation", func(t *testing.T) {
 		cfg := Config{
-			Paths:               []string{t.TempDir()},
+			Include:             []string{t.TempDir()},
 			FingerprintStrategy: watcher.FingerprintStrategyChecksum,
 			FingerprintSize:     0,
 		}
@@ -267,11 +282,10 @@ func TestCollector_FileRemovalCleanup(t *testing.T) {
 	var mu sync.Mutex
 
 	cfg := Config{
-		Paths:               []string{tempDir},
+		Include:             []string{tempDir, "cleanup_test.txt"},
 		PollInterval:        100 * time.Millisecond,
 		WorkerCount:         1,
 		Separator:           '\n',
-		Include:             []string{"cleanup_test.txt"},
 		FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
 		OnLineFunc: func(line string) {
 			mu.Lock()
@@ -340,8 +354,7 @@ func TestCollector_OffsetPersistence(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
-			Include:             []string{"offset_test.txt"},
+			Include:             []string{tempDir, "offset_test.txt"},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           '\n',
@@ -397,9 +410,8 @@ func TestCollector_OffsetPersistence(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
+			Include:             []string{tempDir, "offset_test.txt"},
 			PollInterval:        100 * time.Millisecond,
-			Include:             []string{"offset_test.txt"},
 			WorkerCount:         1,
 			Separator:           '\n',
 			FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
@@ -458,12 +470,11 @@ func TestCollector_IncludeExcludeFilters(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
+			Include:             []string{tempDir, "*.log"},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           '\n',
 			FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
-			Include:             []string{"*.log"},
 			OnLineFunc: func(line string) {
 				mu.Lock()
 				defer mu.Unlock()
@@ -499,7 +510,7 @@ func TestCollector_IncludeExcludeFilters(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
+			Include:             []string{tempDir},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           '\n',
@@ -548,12 +559,11 @@ func TestCollector_IncludeExcludeFilters(t *testing.T) {
 		var mu sync.Mutex
 
 		cfg := Config{
-			Paths:               []string{tempDir},
+			Include:             []string{tempDir, "*.txt", "*.log"},
 			PollInterval:        100 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           '\n',
 			FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
-			Include:             []string{"*.txt", "*.log"},
 			Exclude:             []string{"*.json"},
 			OnLineFunc: func(line string) {
 				mu.Lock()

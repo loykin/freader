@@ -118,7 +118,6 @@ func NewCollector(cfg Config) (*Collector, error) {
 
 	var err error
 	config := watcher.DefaultConfig()
-	config.Paths = cfg.Paths
 	config.PollInterval = cfg.PollInterval
 	config.FileTracker = c.fileManager
 	config.FingerprintStrategy = cfg.FingerprintStrategy

@@ -6,7 +6,6 @@ import (
 )
 
 type Config struct {
-	Paths               []string
 	WorkerCount         int
 	Separator           byte
 	PollInterval        time.Duration
