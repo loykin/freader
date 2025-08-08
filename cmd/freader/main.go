@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"freader/pkg/collector"
+	"freader/pkg/metrics"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/spf13/cobra"
 )
@@ -58,6 +61,20 @@ func runCollector(config *Config) error {
 	}
 	defer cleanup()
 
+	// Optionally start Prometheus metrics endpoint
+	var metricsStop = func() error { return nil }
+	if config.PrometheusEnable {
+		// Register our metrics explicitly to the default registry to avoid library init-time side effects
+		if err := metrics.Register(prometheus.DefaultRegisterer); err != nil {
+			return fmt.Errorf("failed to register prometheus metrics: %w", err)
+		}
+		metricsServer, err := metrics.Start(config.PrometheusAddr)
+		if err != nil {
+			return fmt.Errorf("failed to start prometheus endpoint: %w", err)
+		}
+		metricsStop = metricsServer.Stop
+	}
+
 	// Create configuration
 	cfg := collector.Config{}
 	cfg.Default()
@@ -79,6 +96,7 @@ func runCollector(config *Config) error {
 	// Create collector
 	c, err := collector.NewCollector(cfg)
 	if err != nil {
+		_ = metricsStop()
 		return errors.New("error creating collector: " + err.Error())
 	}
 
@@ -95,6 +113,7 @@ func runCollector(config *Config) error {
 
 	fmt.Println("Shutting down...")
 	c.Stop()
+	_ = metricsStop()
 
 	return nil
 }

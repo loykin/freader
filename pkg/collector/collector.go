@@ -2,6 +2,7 @@ package collector
 
 import (
 	"freader/pkg/file_tracker"
+	"freader/pkg/metrics"
 	"freader/pkg/store"
 	"freader/pkg/tailer"
 	"freader/pkg/watcher"
@@ -63,11 +64,15 @@ func (c *Collector) worker() {
 				if c.onLineFunc != nil {
 					c.onLineFunc(line)
 				}
+				// Metrics: count processed line and bytes emitted (approximate)
+				metrics.IncLines(1)
+				metrics.AddBytes(len(line))
 				bo.Reset()
 			})
 			if os.IsNotExist(err) {
 				slog.Debug("file not found", "file", fileTail.FileId, "error", err)
 			} else if err != nil {
+				metrics.IncReadErrors()
 				slog.Error("failed to read file", "file", fileTail.FileId, "error", err)
 			} else if err == nil {
 				// Update the offset in the FileTracker
@@ -146,6 +151,9 @@ func NewCollector(cfg Config) (*Collector, error) {
 					// Update the offset in the FileTracker
 					// The file was just added by the watcher, so we need to update its offset
 					c.fileManager.UpdateOffset(id, offset)
+
+					// Metrics: note that we restored an offset on startup/discovery
+					metrics.IncRestoredOffsets()
 				}
 			}
 
@@ -157,10 +165,15 @@ func NewCollector(cfg Config) (*Collector, error) {
 			}
 			slog.Debug("file added", "file", id, "path", path, "offset", offset)
 			c.scheduler.Add(id, &fileTail, false)
+			// Metrics: track discovered and active files
+			metrics.IncFilesSeen()
+			metrics.IncActiveFiles()
 		},
 		func(id string) {
 			// Remove from scheduler
 			c.scheduler.Remove(id)
+			// Metrics: active files decrease
+			metrics.DecActiveFiles()
 
 			// Delete offset from store if available
 			if c.offsetDB != nil && c.cfg.StoreOffsets {
