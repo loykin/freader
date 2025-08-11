@@ -2,9 +2,10 @@ package collector
 
 import (
 	"container/list"
-	"freader/pkg/tailer"
 	"log/slog"
 	"sync"
+
+	"github.com/loykin/freader/pkg/tailer"
 )
 
 type TailScheduler struct {

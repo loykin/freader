@@ -3,7 +3,7 @@ package main
 
 import (
 	"fmt"
-	"freader/pkg/collector"
+	"github.com/loykin/freader/pkg/collector"
 	"log/slog"
 	"os"
 	"os/signal"

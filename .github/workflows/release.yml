@@ -1,0 +1,67 @@
+name: Release on tag (main only)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history to verify ancestry
+
+      - name: Validate tag format (vMAJOR.MINOR.PATCH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          echo "Validating tag format: $TAG_REF"
+          if [[ ! "$TAG_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must match vMAJOR.MINOR.PATCH (e.g., v0.1.0). Given: $TAG_REF"
+            exit 1
+          fi
+
+      - name: Ensure tag is on main branch history
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_REF="${GITHUB_REF#refs/tags/}"
+          echo "Verifying tag $TAG_REF is on main..."
+
+          # Resolve the tagged commit
+          COMMIT_SHA=$(git rev-list -n 1 "$TAG_REF")
+          echo "Tag commit: $COMMIT_SHA"
+
+          # Fetch main and verify ancestry
+          git fetch --quiet origin main
+          if git merge-base --is-ancestor "$COMMIT_SHA" origin/main; then
+            echo "Tag $TAG_REF is contained in main's history. Proceeding."
+          else
+            echo "Tag $TAG_REF is NOT on main branch history. Failing to prevent release."
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

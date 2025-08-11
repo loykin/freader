@@ -3,9 +3,9 @@ package main
 
 import (
 	"fmt"
-	"freader/pkg/file_tracker"
-	"freader/pkg/tailer"
-	"freader/pkg/watcher"
+	"github.com/loykin/freader/pkg/file_tracker"
+	"github.com/loykin/freader/pkg/tailer"
+	"github.com/loykin/freader/pkg/watcher"
 	"log/slog"
 	"os"
 	"path/filepath"

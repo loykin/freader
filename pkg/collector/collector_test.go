@@ -3,13 +3,14 @@ package collector
 import (
 	"database/sql"
 	"fmt"
-	"freader/pkg/watcher"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/loykin/freader/pkg/watcher"
 
 	"github.com/stretchr/testify/assert"
 	_ "modernc.org/sqlite"

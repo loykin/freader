@@ -1,13 +1,14 @@
 package tailer
 
 import (
-	"freader/pkg/file_tracker"
-	"freader/pkg/watcher"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
+	"github.com/loykin/freader/pkg/watcher"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"freader/pkg/watcher"
 	"io"
 	"os"
 	"time"
+
+	"github.com/loykin/freader/pkg/watcher"
 
 	"github.com/spf13/cobra"
 )

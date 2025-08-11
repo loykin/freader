@@ -1,8 +1,9 @@
 package watcher
 
 import (
-	"freader/pkg/file_tracker"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
 )
 
 type Config struct {

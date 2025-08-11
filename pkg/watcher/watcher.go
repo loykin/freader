@@ -2,13 +2,14 @@ package watcher
 
 import (
 	"errors"
-	"freader/pkg/file_tracker"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
 )
 
 const FingerprintStrategyChecksum = "checksum"

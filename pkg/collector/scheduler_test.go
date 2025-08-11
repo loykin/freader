@@ -2,11 +2,12 @@ package collector
 
 import (
 	"fmt"
-	"freader/pkg/file_tracker"
-	"freader/pkg/tailer"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
+	"github.com/loykin/freader/pkg/tailer"
 )
 
 func TestTailScheduler_Comprehensive(t *testing.T) {

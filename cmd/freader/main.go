@@ -3,12 +3,13 @@ package main
 import (
 	"errors"
 	"fmt"
-	"freader/pkg/collector"
-	"freader/pkg/metrics"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/loykin/freader/pkg/collector"
+	"github.com/loykin/freader/pkg/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 

@@ -4,12 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"freader/pkg/file_tracker"
-	"freader/pkg/watcher"
 	"io"
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
+	"github.com/loykin/freader/pkg/watcher"
 )
 
 type TailReader struct {

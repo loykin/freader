@@ -1,4 +1,4 @@
-module freader
+module github.com/loykin/freader
 
 go 1.24
 

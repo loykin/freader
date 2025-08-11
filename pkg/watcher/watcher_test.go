@@ -1,11 +1,12 @@
 package watcher
 
 import (
-	"freader/pkg/file_tracker"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
 
 	"github.com/stretchr/testify/assert"
 )

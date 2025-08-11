@@ -1,8 +1,9 @@
 package collector
 
 import (
-	"freader/pkg/watcher"
 	"time"
+
+	"github.com/loykin/freader/pkg/watcher"
 )
 
 type Config struct {

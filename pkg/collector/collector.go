@@ -1,15 +1,16 @@
 package collector
 
 import (
-	"freader/pkg/file_tracker"
-	"freader/pkg/metrics"
-	"freader/pkg/store"
-	"freader/pkg/tailer"
-	"freader/pkg/watcher"
 	"log/slog"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/loykin/freader/pkg/file_tracker"
+	"github.com/loykin/freader/pkg/metrics"
+	"github.com/loykin/freader/pkg/store"
+	"github.com/loykin/freader/pkg/tailer"
+	"github.com/loykin/freader/pkg/watcher"
 
 	"github.com/cenkalti/backoff/v4"
 )
