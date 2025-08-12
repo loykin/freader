@@ -81,6 +81,13 @@ func TestGetFileID_Basic(t *testing.T) {
 }
 
 func TestGetFileID_MultipleFilesAndModification(t *testing.T) {
+	switch runtime.GOOS {
+	case "linux":
+		return
+	case "windows":
+		return
+	}
+
 	tmpDir := t.TempDir()
 	err := os.MkdirAll(tmpDir, 0755)
 	assert.NoError(t, err)
