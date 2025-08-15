@@ -1,7 +1,12 @@
 //go:build darwin
-// +build darwin
 
 package file_tracker
+
+import (
+	"fmt"
+	"os"
+	"syscall"
+)
 
 func GetFileID(info os.FileInfo) (string, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
