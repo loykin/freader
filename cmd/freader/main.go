@@ -29,12 +29,24 @@ Examples:
   # Monitor multiple directories with custom poll interval
   freader --include ./log,/var/log --poll-interval 5s
 
-  # Output to a file instead of stdout
-  freader --output-type file --output /tmp/output.log
+  # Use device+inode-based file tracking instead of checksum
+  freader --fingerprint-strategy deviceAndInode
 
-  # Use inode-based file tracking instead of checksum
-  freader --fingerprint-strategy inode`,
+  # Use a config file (TOML/YAML/JSON)
+  freader --config ./config/config.toml
+
+  # Or set the environment variable (same effect as --config)
+  FREADER_CONFIG=./config/config.toml freader
+
+Notes:
+  - Sink backends (ClickHouse/OpenSearch) and their credentials are configured via
+    config file or environment variables only (not CLI flags). See config/config.toml.
+`,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Load configuration from Viper (flags, env, optional file) before validation
+			if err := config.LoadFromViper(cmd); err != nil {
+				return err
+			}
 			return config.Validate()
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -52,17 +64,10 @@ Examples:
 }
 
 func runCollector(config *Config) error {
-	// Setup output
-	output, cleanup, err := config.GetOutput()
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
 	// Optionally start Prometheus metrics endpoint
 	var metricsStop = func() error { return nil }
-	if config.PrometheusEnable {
-		stopFn, err := freader.StartMetrics(config.PrometheusAddr)
+	if config.Prometheus.Enable {
+		stopFn, err := freader.StartMetrics(config.Prometheus.Addr)
 		if err != nil {
 			return fmt.Errorf("failed to start prometheus endpoint: %w", err)
 		}
@@ -79,12 +84,24 @@ func runCollector(config *Config) error {
 	cfg.FingerprintStrategy = config.FingerprintStrategy
 	cfg.WorkerCount = config.WorkerCount
 	cfg.Exclude = config.Exclude
+	// Optional external sink (clickhouse/opensearch)
+	sink, err := buildSink(config)
+	if err != nil {
+		return fmt.Errorf("failed to build sink: %w", err)
+	}
+	if sink != nil {
+		defer func() { _ = sink.Stop() }()
+	}
+
 	cfg.OnLineFunc = func(line string) {
-		_, err := fmt.Fprintln(output, line)
-		if err != nil {
-			slog.Error(err.Error())
+		if sink != nil {
+			// When a sink is configured (stdout/opensearch/clickhouse), it is the single output path.
+			// Do not duplicate to local output.
+			sink.Enqueue(line)
 			return
 		}
+		// No sink configured: fallback print to stdout
+		fmt.Println(line)
 	}
 
 	// Create collector

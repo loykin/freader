@@ -1,0 +1,69 @@
+# freader configuration example (TOML)
+#
+# You can start freader with:
+#   freader --config ./config/config.toml
+#
+# Alternatively, set FREADER_CONFIG environment variable to point to this file:
+#   export FREADER_CONFIG=./config/config.toml
+
+# Directories/files to include (globs or exact paths)
+include = ["./examples/embeded/log", "./examples/embeded/log/*.log"]
+# Optional exclude patterns
+exclude = ["*.tmp", "*.bak"]
+
+# Polling interval for file scanning (Go duration format)
+poll-interval = "2s"
+
+# Fingerprint settings
+# "checksum" (requires fingerprint-size > 0) or "deviceAndInode"
+fingerprint-strategy = "checksum"
+fingerprint-size = 1024
+
+# Number of worker goroutines to read files
+workers = 1
+
+[sink]
+# Type: "" (disabled), "console", "stdout", "stderr", "file", "clickhouse", or "opensearch"
+# Recommended: use "console" with [sink.console.stream] = stdout|stderr
+# Default behavior prints to stdout via sink
+type = "console"
+# Optional host override (otherwise system hostname is used)
+# host = "my-host-1"
+# Optional labels (arbitrary key/value)
+labels = { env = "dev", app = "freader" }
+# Forwarding filters (substring match)
+# If include is non-empty, only lines containing any of these substrings are forwarded
+# If exclude has any match, the line is dropped from forwarding
+include = ["ERROR", "WARN"]
+exclude = ["debug"]
+# Batch controls
+batch-size = 200
+batch-interval = "2s"
+
+[sink.console]
+# Choose stream: stdout or stderr
+stream = "stdout"
+
+# File sink settings (used when sink.type = "file")
+[sink.file]
+path = "/var/log/freader.out"
+
+# ClickHouse settings nested under sink
+[sink.clickhouse]
+addr = "http://localhost:8123"   # or native "localhost:9000"
+database = "mydb"
+table = "logs"
+user = ""
+password = ""
+
+# OpenSearch settings nested under sink
+[sink.opensearch]
+url = "http://localhost:9200"
+index = "logs-freader"
+user = ""
+password = ""
+
+# Prometheus metrics endpoint
+[prometheus]
+enable = false
+addr = ":2112"
