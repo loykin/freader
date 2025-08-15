@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loykin/freader/pkg/file_tracker"
-	"github.com/loykin/freader/pkg/metrics"
-	"github.com/loykin/freader/pkg/store"
-	"github.com/loykin/freader/pkg/tailer"
-	"github.com/loykin/freader/pkg/watcher"
+	"github.com/loykin/freader/internal/file_tracker"
+	"github.com/loykin/freader/internal/metrics"
+	"github.com/loykin/freader/internal/store"
+	"github.com/loykin/freader/internal/tailer"
+	"github.com/loykin/freader/internal/watcher"
 
 	"github.com/cenkalti/backoff/v4"
 )

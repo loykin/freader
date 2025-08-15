@@ -3,13 +3,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/loykin/freader/pkg/file_tracker"
-	"github.com/loykin/freader/pkg/tailer"
-	"github.com/loykin/freader/pkg/watcher"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/loykin/freader"
 )
 
 // This example demonstrates how to use the TailReader to read log files
@@ -41,10 +40,10 @@ func main() {
 	}
 
 	// Create a file tracker to manage the file information
-	fileTracker := file_tracker.New()
+	fileTracker := freader.NewFileTracker()
 
 	// Get the file ID for the log file
-	fileId, err := file_tracker.GetFileIDFromPath(logFilePath)
+	fileId, err := freader.GetFileIDFromPath(logFilePath)
 	if err != nil {
 		slog.Error("Failed to get file ID", "error", err)
 		os.Exit(1)
@@ -52,11 +51,11 @@ func main() {
 
 	// Add the file to the tracker
 	// Using device and inode as the fingerprint strategy
-	fileTracker.Add(fileId, logFilePath, watcher.FingerprintStrategyDeviceAndInode, 0)
+	fileTracker.Add(fileId, logFilePath, freader.FingerprintStrategyDeviceAndInode, 0)
 
 	// Create a tail reader to read the log file
 	// The tail reader will start reading from the beginning of the file (offset 0)
-	reader := &tailer.TailReader{
+	reader := &freader.TailReader{
 		FileId:      fileId,
 		Offset:      0,
 		Separator:   '\n',

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/loykin/freader/pkg/tailer"
+	"github.com/loykin/freader/internal/tailer"
 )
 
 type TailScheduler struct {

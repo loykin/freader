@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/loykin/freader/pkg/watcher"
+	"github.com/loykin/freader"
 
 	"github.com/spf13/cobra"
 )
@@ -53,8 +53,8 @@ func (c *Config) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&c.FingerprintSize, "fingerprint-size", "s", c.FingerprintSize, "Size of fingerprint for checksum strategy")
 	cmd.Flags().StringVarP(&c.FingerprintStrategy, "fingerprint-strategy", "f", c.FingerprintStrategy,
 		fmt.Sprintf("Fingerprint strategy (%s or %s)",
-			watcher.FingerprintStrategyChecksum,
-			watcher.FingerprintStrategyDeviceAndInode))
+			freader.FingerprintStrategyChecksum,
+			freader.FingerprintStrategyDeviceAndInode))
 	cmd.Flags().IntVarP(&c.WorkerCount, "workers", "w", c.WorkerCount, "Number of worker goroutines")
 	cmd.Flags().StringVarP(&c.OutputFile, "output", "o", c.OutputFile, "Output file path (required when output-type is 'file')")
 	cmd.Flags().StringVarP(&c.OutputType, "output-type", "t", c.OutputType, "Output type (stdout, stderr, or file)")

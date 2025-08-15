@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loykin/freader/pkg/file_tracker"
-	"github.com/loykin/freader/pkg/tailer"
+	"github.com/loykin/freader/internal/file_tracker"
+	"github.com/loykin/freader/internal/tailer"
 )
 
 func TestTailScheduler_Comprehensive(t *testing.T) {

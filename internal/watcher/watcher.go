@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loykin/freader/pkg/file_tracker"
+	"github.com/loykin/freader/internal/file_tracker"
 )
 
 const FingerprintStrategyChecksum = "checksum"

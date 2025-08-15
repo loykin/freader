@@ -3,12 +3,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/loykin/freader/pkg/collector"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/loykin/freader"
 )
 
 // This example shows how to embed and run the collector inside your own program.
@@ -19,7 +20,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
 	// Prepare collector configuration
-	cfg := collector.Config{}
+	cfg := freader.Config{}
 	cfg.Default()
 	cfg.WorkerCount = 1
 	cfg.PollInterval = 500 * time.Millisecond
@@ -37,7 +38,7 @@ func main() {
 	}
 
 	// Create the collector
-	c, err := collector.NewCollector(cfg)
+	c, err := freader.NewCollector(cfg)
 	if err != nil {
 		slog.Error("failed to create collector", "error", err)
 		os.Exit(1)

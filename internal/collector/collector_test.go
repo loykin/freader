@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loykin/freader/pkg/watcher"
+	"github.com/loykin/freader/internal/watcher"
 
 	"github.com/stretchr/testify/assert"
 	_ "modernc.org/sqlite"

@@ -3,7 +3,7 @@ package collector
 import (
 	"time"
 
-	"github.com/loykin/freader/pkg/watcher"
+	"github.com/loykin/freader/internal/watcher"
 )
 
 type Config struct {

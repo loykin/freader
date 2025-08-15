@@ -8,10 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/loykin/freader/pkg/collector"
-	"github.com/loykin/freader/pkg/metrics"
-
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/loykin/freader"
 
 	"github.com/spf13/cobra"
 )
@@ -65,19 +62,15 @@ func runCollector(config *Config) error {
 	// Optionally start Prometheus metrics endpoint
 	var metricsStop = func() error { return nil }
 	if config.PrometheusEnable {
-		// Register our metrics explicitly to the default registry to avoid library init-time side effects
-		if err := metrics.Register(prometheus.DefaultRegisterer); err != nil {
-			return fmt.Errorf("failed to register prometheus metrics: %w", err)
-		}
-		metricsServer, err := metrics.Start(config.PrometheusAddr)
+		stopFn, err := freader.StartMetrics(config.PrometheusAddr)
 		if err != nil {
 			return fmt.Errorf("failed to start prometheus endpoint: %w", err)
 		}
-		metricsStop = metricsServer.Stop
+		metricsStop = stopFn
 	}
 
 	// Create configuration
-	cfg := collector.Config{}
+	cfg := freader.Config{}
 	cfg.Default()
 	// Use include-only filtering
 	cfg.Include = config.Include
@@ -95,7 +88,7 @@ func runCollector(config *Config) error {
 	}
 
 	// Create collector
-	c, err := collector.NewCollector(cfg)
+	c, err := freader.NewCollector(cfg)
 	if err != nil {
 		_ = metricsStop()
 		return errors.New("error creating collector: " + err.Error())
