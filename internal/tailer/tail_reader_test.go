@@ -3,6 +3,7 @@ package tailer
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ import (
 )
 
 func TestTailReader_Integration(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based tailer tests on Windows")
+	}
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 	err := os.WriteFile(testFile, []byte("line1\nline2\nline3\n"), 0644)
@@ -136,6 +140,9 @@ func TestTailReader_Integration(t *testing.T) {
 }
 
 func TestTailReader_Cleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based tailer tests on Windows")
+	}
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "cleanup.txt")
 	err := os.WriteFile(testFile, []byte("test\n"), 0644)

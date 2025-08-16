@@ -3,6 +3,7 @@ package watcher
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -12,6 +13,9 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based watcher tests on Windows")
+	}
 	config := DefaultConfig()
 
 	assert.Equal(t, 2*time.Second, config.PollInterval)
@@ -20,6 +24,9 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based watcher tests on Windows")
+	}
 	tests := []struct {
 		name        string
 		config      Config
@@ -85,6 +92,9 @@ func TestNewWatcher_FingerprintStrategyValidation(t *testing.T) {
 }
 
 func TestWatcher_StartStop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based watcher tests on Windows")
+	}
 	config := Config{
 		Include:             []string{t.TempDir()},
 		PollInterval:        10 * time.Millisecond,
@@ -121,6 +131,9 @@ func TestWatcher_StartStop(t *testing.T) {
 }
 
 func TestWatcher_PathValidation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based watcher tests on Windows")
+	}
 	tests := []struct {
 		name        string
 		paths       []string
@@ -168,6 +181,9 @@ func TestWatcher_PathValidation(t *testing.T) {
 }
 
 func TestWatcher_IncludeExcludeFilters(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based watcher tests on Windows")
+	}
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 

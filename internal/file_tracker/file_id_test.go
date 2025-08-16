@@ -14,6 +14,9 @@ import (
 )
 
 func TestGetFileID_Basic(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based test on Windows")
+	}
 	tmpDir := t.TempDir()
 
 	// 1) Create new file

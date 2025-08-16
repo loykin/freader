@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -23,6 +24,9 @@ func TestCollector_Integration(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("DeviceAndInode Strategy", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("skip inode-based collector test on Windows")
+		}
 		var lines []string
 		var mu sync.Mutex
 
@@ -126,6 +130,9 @@ func TestCollector_Integration(t *testing.T) {
 }
 
 func TestCollector_MultipleFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
 	tempDir := t.TempDir()
 
 	// Create multiple files
@@ -186,6 +193,9 @@ func TestCollector_MultipleFiles(t *testing.T) {
 }
 
 func TestCollector_FileRemoval(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "remove.txt")
 	err := os.WriteFile(testFile, []byte("content1\ncontent2\n"), 0644)
@@ -229,6 +239,9 @@ func TestCollector_FileRemoval(t *testing.T) {
 }
 
 func TestCollector_ErrorCases(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
 	t.Run("Invalid Directory", func(t *testing.T) {
 		cfg := Config{
 			Include:             []string{"/nonexistent/path"},
@@ -270,6 +283,9 @@ func TestCollector_ErrorCases(t *testing.T) {
 }
 
 func TestCollector_FileRemovalCleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "cleanup_test.db")
 
@@ -340,6 +356,9 @@ func TestCollector_FileRemovalCleanup(t *testing.T) {
 }
 
 func TestCollector_OffsetPersistence(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "offset_test.db")
 
@@ -449,6 +468,9 @@ func TestCollector_OffsetPersistence(t *testing.T) {
 }
 
 func TestCollector_IncludeExcludeFilters(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
 	tempDir := t.TempDir()
 
 	// Create test files with different extensions
