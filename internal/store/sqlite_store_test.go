@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -152,7 +153,14 @@ func TestSQLiteStore_Errors(t *testing.T) {
 	// Test with invalid database path
 	t.Run("Invalid database path", func(t *testing.T) {
 		// Create a path that can't be written to
-		invalidPath := "/nonexistent/directory/test.db"
+		var invalidPath string
+		if runtime.GOOS == "windows" {
+			// 없는 드라이브 문자를 써서 무조건 실패하게
+			invalidPath = `Z:\definitely_nonexistent\test.db`
+		} else {
+			// 루트 밑이라 권한 때문에 실패
+			invalidPath = "/nonexistent/directory/test.db"
+		}
 
 		// Attempt to create store with invalid path
 		store, err := NewSQLiteStore(invalidPath)
