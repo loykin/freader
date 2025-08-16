@@ -34,7 +34,7 @@ jobs:
         run: go build -trimpath -ldflags "-s -w" -o freader ./cmd/freader
 
       - name: Run tests
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+        run: go test -race -covermode=atomic -coverprofile="coverage.out" ./...
 
       - name: Upload coverage artifact
         if: success()
