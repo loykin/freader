@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/loykin/freader/internal/file_tracker"
@@ -14,9 +15,11 @@ import (
 )
 
 type TailReader struct {
-	FileId      string
-	Offset      int64
-	Separator   byte
+	FileId    string
+	Offset    int64
+	Separator byte
+	// mu protects access to stopCh and doneCh to avoid data races between Run and Stop
+	mu          sync.Mutex
 	stopCh      chan struct{}
 	doneCh      chan struct{}
 	FileManager *file_tracker.FileTracker
@@ -134,11 +137,15 @@ func (t *TailReader) ReadOnce(callback func(string)) error {
 }
 
 func (t *TailReader) Run(callback func(string)) {
+	// Initialize channels under lock to prevent races with Stop()
+	t.mu.Lock()
 	t.stopCh = make(chan struct{})
 	t.doneCh = make(chan struct{})
+	localDone := t.doneCh
+	t.mu.Unlock()
 
 	go func() {
-		defer close(t.doneCh)
+		defer close(localDone)
 		if err := t.readLoop(callback); err != nil {
 			slog.Error("failed to read file", "file", t.FileId, "error", err)
 			t.FileManager.Remove(t.FileId)
@@ -147,15 +154,27 @@ func (t *TailReader) Run(callback func(string)) {
 }
 
 func (t *TailReader) Stop() {
-	if t.stopCh == nil {
+	// Safely capture channels under lock to avoid races with Run()
+	t.mu.Lock()
+	if t.stopCh == nil || t.doneCh == nil {
+		t.mu.Unlock()
 		return
 	}
+	localStop := t.stopCh
+	localDone := t.doneCh
+	t.mu.Unlock()
+
+	// Close stop channel once (non-blocking if already closed)
 	select {
-	case <-t.stopCh:
+	case <-localStop:
+		// already closed
 	default:
-		close(t.stopCh)
+		close(localStop)
 	}
-	<-t.doneCh
+
+	// Wait for the reader goroutine to finish
+	<-localDone
+
 	if t.FileId != "" {
 		t.FileManager.Remove(t.FileId)
 	}
