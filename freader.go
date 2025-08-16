@@ -49,6 +49,13 @@ func NewCollector(cfg Config) (*Collector, error) {
 	return collector.NewCollector(cfg)
 }
 
+// RegisterMetrics exposes registration of built-in library metrics so callers can
+// register them alongside their own collectors (e.g., sink metrics) before starting
+// the HTTP server. It is safe to call multiple times.
+func RegisterMetrics(r prometheus.Registerer) error {
+	return metrics.Register(r)
+}
+
 // StartMetrics registers freader metrics on the default Prometheus registry and starts an HTTP server.
 // It returns a stop function to gracefully shut down the metrics server.
 func StartMetrics(addr string) (func() error, error) {

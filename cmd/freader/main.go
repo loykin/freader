@@ -9,7 +9,8 @@ import (
 	"syscall"
 
 	"github.com/loykin/freader"
-
+	cmdmetrics "github.com/loykin/freader/cmd/freader/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 )
 
@@ -67,6 +68,13 @@ func runCollector(config *Config) error {
 	// Optionally start Prometheus metrics endpoint
 	var metricsStop = func() error { return nil }
 	if config.Prometheus.Enable {
+		// Register library metrics and sink metrics before exposing the endpoint
+		if err := freader.RegisterMetrics(prometheus.DefaultRegisterer); err != nil {
+			return fmt.Errorf("failed to register default metrics: %w", err)
+		}
+		if err := cmdmetrics.Register(prometheus.DefaultRegisterer); err != nil {
+			return fmt.Errorf("failed to register sink metrics: %w", err)
+		}
 		stopFn, err := freader.StartMetrics(config.Prometheus.Addr)
 		if err != nil {
 			return fmt.Errorf("failed to start prometheus endpoint: %w", err)

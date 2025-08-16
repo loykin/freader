@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	cmdmetrics "github.com/loykin/freader/cmd/freader/metrics"
 	"github.com/loykin/freader/cmd/freader/sink/common"
 	osclient "github.com/opensearch-project/opensearch-go"
 	"github.com/opensearch-project/opensearch-go/opensearchutil"
@@ -35,7 +36,7 @@ func New(baseURL, index, user, pass, host string, labels map[string]string, batc
 		return nil, err
 	}
 	s := &Sink{
-		batcher: common.NewBatcher(batchSize, batchInterval, includes, excludes),
+		batcher: common.NewBatcher(batchSize, batchInterval, includes, excludes, "opensearch"),
 		client:  cli,
 		index:   index,
 		host:    host,
@@ -89,11 +90,13 @@ func (s *Sink) Enqueue(line string) { s.batcher.Enqueue(line) }
 func (s *Sink) flush(lines []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	start := time.Now()
 	bi, err := opensearchutil.NewBulkIndexer(opensearchutil.BulkIndexerConfig{
 		Client: s.client,
 		Index:  s.index,
 	})
 	if err != nil {
+		cmdmetrics.SinkFlushObserve("opensearch", len(lines), time.Since(start), false)
 		return err
 	}
 	for _, ln := range lines {
@@ -117,15 +120,19 @@ func (s *Sink) flush(lines []string) error {
 			},
 		})
 		if err != nil {
+			cmdmetrics.SinkFlushObserve("opensearch", len(lines), time.Since(start), false)
 			return err
 		}
 	}
 	if err := bi.Close(ctx); err != nil {
+		cmdmetrics.SinkFlushObserve("opensearch", len(lines), time.Since(start), false)
 		return err
 	}
 	stats := bi.Stats()
 	if stats.NumFailed > 0 {
+		cmdmetrics.SinkFlushObserve("opensearch", len(lines), time.Since(start), false)
 		return fmt.Errorf("opensearch bulk failed items: %d", stats.NumFailed)
 	}
+	cmdmetrics.SinkFlushObserve("opensearch", len(lines), time.Since(start), true)
 	return nil
 }

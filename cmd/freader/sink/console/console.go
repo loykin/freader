@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	cmdmetrics "github.com/loykin/freader/cmd/freader/metrics"
 	"github.com/loykin/freader/cmd/freader/sink/common"
 )
 
@@ -24,7 +25,7 @@ func New(stream string, batchSize int, batchInterval time.Duration, includes, ex
 	if stream == "stderr" {
 		w = os.Stderr
 	}
-	s := &stdoutSink{batcher: common.NewBatcher(batchSize, batchInterval, includes, excludes), w: w}
+	s := &stdoutSink{batcher: common.NewBatcher(batchSize, batchInterval, includes, excludes, "console"), w: w}
 	s.start()
 	return s
 }
@@ -40,7 +41,7 @@ func NewFile(path string, batchSize int, batchInterval time.Duration, includes, 
 	if path == "" {
 		return nil, errors.New("file sink requires a path")
 	}
-	s := &fileSink{batcher: common.NewBatcher(batchSize, batchInterval, includes, excludes), path: path}
+	s := &fileSink{batcher: common.NewBatcher(batchSize, batchInterval, includes, excludes, "file"), path: path}
 	s.start()
 	return s, nil
 }
@@ -59,9 +60,14 @@ func (s *fileSink) start() {
 		ticker := time.NewTicker(s.batcher.BatchInterval)
 		defer ticker.Stop()
 		flush := func() {
+			if len(buf) == 0 {
+				return
+			}
+			start := time.Now()
 			for _, ln := range buf {
 				_, _ = fmt.Fprintln(s.f, ln)
 			}
+			cmdmetrics.SinkFlushObserve("file", len(buf), time.Since(start), true)
 			buf = buf[:0]
 		}
 		for {
@@ -100,9 +106,14 @@ func (s *stdoutSink) start() {
 		ticker := time.NewTicker(s.batcher.BatchInterval)
 		defer ticker.Stop()
 		flush := func() {
+			if len(buf) == 0 {
+				return
+			}
+			start := time.Now()
 			for _, ln := range buf {
 				_, _ = fmt.Fprintln(s.w, ln)
 			}
+			cmdmetrics.SinkFlushObserve("console", len(buf), time.Since(start), true)
 			buf = buf[:0]
 		}
 		for {

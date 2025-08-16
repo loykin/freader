@@ -10,6 +10,7 @@ import (
 	"time"
 
 	ch "github.com/ClickHouse/clickhouse-go/v2"
+	cmdmetrics "github.com/loykin/freader/cmd/freader/metrics"
 	"github.com/loykin/freader/cmd/freader/sink/common"
 )
 
@@ -52,7 +53,7 @@ func New(addr, database, table, user, pass, host string, labels map[string]strin
 		return nil, err
 	}
 	s := &Sink{
-		batcher:  common.NewBatcher(batchSize, batchInterval, includes, excludes),
+		batcher:  common.NewBatcher(batchSize, batchInterval, includes, excludes, "clickhouse"),
 		conn:     conn,
 		database: database,
 		table:    table,
@@ -111,14 +112,19 @@ func (s *Sink) flush(lines []string) error {
 	if s.database != "" && !strings.Contains(tbl, ".") {
 		tbl = s.database + "." + s.table
 	}
+	start := time.Now()
 	batch, err := s.conn.PrepareBatch(ctx, "INSERT INTO "+tbl+" (ts, host, labels, message)")
 	if err != nil {
+		cmdmetrics.SinkFlushObserve("clickhouse", len(lines), time.Since(start), false)
 		return err
 	}
 	for _, ln := range lines {
 		if err := batch.Append(time.Now(), s.host, s.labels, ln); err != nil {
+			cmdmetrics.SinkFlushObserve("clickhouse", len(lines), time.Since(start), false)
 			return err
 		}
 	}
-	return batch.Send()
+	err = batch.Send()
+	cmdmetrics.SinkFlushObserve("clickhouse", len(lines), time.Since(start), err == nil)
+	return err
 }
