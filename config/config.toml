@@ -34,8 +34,9 @@ labels = { env = "dev", app = "freader" }
 # Forwarding filters (substring match)
 # If include is non-empty, only lines containing any of these substrings are forwarded
 # If exclude has any match, the line is dropped from forwarding
-include = ["ERROR", "WARN"]
-exclude = ["debug"]
+#include = ["ERROR", "WARN"]
+#exclude = ["debug"]
+
 # Batch controls
 batch-size = 200
 batch-interval = "2s"
