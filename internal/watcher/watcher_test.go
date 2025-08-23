@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -283,5 +284,51 @@ func TestWatcher_IncludeExcludeFilters(t *testing.T) {
 				assert.False(t, foundFiles[file], "Unexpected file %s was found", file)
 			}
 		})
+	}
+}
+
+func TestWatcher_ChecksumEmitsCorrectID(t *testing.T) {
+	base := t.TempDir()
+	p := filepath.Join(base, "watch_chk.txt")
+	// make content > 64 bytes
+	content := ""
+	for i := 0; i < 10; i++ {
+		content += "abcdefghijklmnopqrstuvwxyz\n"
+	}
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	expected, err := file_tracker.GetFileFingerprintFromPath(p, 64)
+	assert.NoError(t, err)
+
+	ft := file_tracker.New()
+	var gotID atomic.Value // string
+
+	cfg := Config{
+		Include:             []string{base},
+		PollInterval:        20 * time.Millisecond,
+		FingerprintStrategy: FingerprintStrategyChecksum,
+		FingerprintSize:     64,
+		FileTracker:         ft,
+	}
+	w, err := NewWatcher(cfg, func(id, path string) { gotID.Store(id) }, func(id string) {})
+	assert.NoError(t, err)
+
+	w.Start()
+	defer w.Stop()
+
+	deadline := time.After(500 * time.Millisecond)
+	for {
+		if v := gotID.Load(); v != nil {
+			if id, ok := v.(string); ok {
+				assert.Equal(t, expected, id)
+				break
+			}
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("did not receive file id from watcher")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 }

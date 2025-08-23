@@ -8,7 +8,7 @@ import (
 
 type Config struct {
 	WorkerCount         int
-	Separator           byte
+	Separator           string
 	PollInterval        time.Duration
 	FingerprintStrategy string
 	FingerprintSize     int
@@ -22,7 +22,7 @@ type Config struct {
 func (c *Config) Default() {
 	c.WorkerCount = 1
 	c.PollInterval = 100 * time.Millisecond
-	c.Separator = '\n'
+	c.Separator = "\n"
 	c.FingerprintStrategy = watcher.FingerprintStrategyDeviceAndInode
 	c.DBPath = "collector.db"
 	c.StoreOffsets = true

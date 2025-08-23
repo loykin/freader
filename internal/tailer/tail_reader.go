@@ -17,7 +17,7 @@ import (
 type TailReader struct {
 	FileId    string
 	Offset    int64
-	Separator byte
+	Separator string
 	// mu protects access to stopCh and doneCh to avoid data races between Run and Stop
 	mu          sync.Mutex
 	stopCh      chan struct{}
@@ -25,6 +25,7 @@ type TailReader struct {
 	FileManager *file_tracker.FileTracker
 	file        *os.File
 	reader      *bufio.Reader
+	buf         []byte // internal buffer across reads for multi-byte separators
 }
 
 func (t *TailReader) open() error {
@@ -83,7 +84,31 @@ func (t *TailReader) open() error {
 }
 
 func (t *TailReader) readNextChunk() ([]byte, error) {
-	return t.reader.ReadBytes(t.Separator)
+	sep := []byte(t.Separator)
+	if len(sep) == 0 {
+		return nil, errors.New("separator must not be empty")
+	}
+	// Use internal buffer t.buf. Keep reading until we find sep or hit EOF.
+	for {
+		// Search for separator in existing buffer
+		if idx := bytes.Index(t.buf, sep); idx >= 0 {
+			end := idx + len(sep)
+			chunk := t.buf[:end]
+			// advance buffer
+			t.buf = append([]byte{}, t.buf[end:]...)
+			return chunk, nil
+		}
+		// Read more data
+		data, err := t.reader.ReadBytes(sep[len(sep)-1])
+		t.buf = append(t.buf, data...)
+		if err != nil {
+			if err == io.EOF {
+				// No complete separator in buffer; do not emit partial
+				return nil, io.EOF
+			}
+			return nil, err
+		}
+	}
 }
 
 func (t *TailReader) readLoop(callback func(string)) error {
@@ -108,7 +133,7 @@ func (t *TailReader) readLoop(callback func(string)) error {
 
 			t.Offset += int64(len(chunk))
 			if len(chunk) > 1 {
-				callback(string(bytes.TrimSuffix(chunk, []byte{t.Separator})))
+				callback(string(bytes.TrimSuffix(chunk, []byte(t.Separator))))
 			}
 		}
 	}
@@ -130,8 +155,9 @@ func (t *TailReader) ReadOnce(callback func(string)) error {
 		}
 		// Always advance offset for consumed chunk, even if it's just a separator (blank line)
 		t.Offset += int64(len(chunk))
-		if len(chunk) > 1 {
-			callback(string(chunk[:len(chunk)-1]))
+		sep := []byte(t.Separator)
+		if len(chunk) > len(sep) {
+			callback(string(chunk[:len(chunk)-len(sep)]))
 		}
 	}
 }
@@ -186,6 +212,7 @@ func (t *TailReader) cleanup() {
 		t.file = nil
 	}
 	t.reader = nil
+	t.buf = nil
 }
 
 func (t *TailReader) Close() {

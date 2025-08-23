@@ -57,7 +57,7 @@ func runScenario(name, strategy string) error {
 	cfg.WorkerCount = 1
 	cfg.PollInterval = 100 * time.Millisecond
 	cfg.Include = []string{logPath} // watch this exact file path
-	cfg.Separator = '\n'
+	cfg.Separator = "\n"
 	cfg.DBPath = filepath.Join(tmpDir, "collector.db")
 	cfg.StoreOffsets = false
 	cfg.FingerprintStrategy = strategy

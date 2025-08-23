@@ -58,7 +58,7 @@ func main() {
 	reader := &freader.TailReader{
 		FileId:      fileId,
 		Offset:      0,
-		Separator:   '\n',
+		Separator:   "\n",
 		FileManager: fileTracker,
 	}
 

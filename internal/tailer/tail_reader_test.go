@@ -14,6 +14,75 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestTailReader_SeparatorsAndRestart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based tailer tests on Windows")
+	}
+	baseDir := t.TempDir()
+
+	// Helper to create tracker and fileId
+	newTracker := func(path string) (*file_tracker.FileTracker, string) {
+		fi, err := os.Stat(path)
+		assert.NoError(t, err)
+		id, err := file_tracker.GetFileID(fi)
+		assert.NoError(t, err)
+		tr := file_tracker.New()
+		tr.Add(id, path, watcher.FingerprintStrategyDeviceAndInode, 0)
+		return tr, id
+	}
+
+	t.Run("CRLF separator \\r\\n", func(t *testing.T) {
+		p := filepath.Join(baseDir, "crlf.txt")
+		// 3 lines terminated with CRLF
+		err := os.WriteFile(p, []byte("a\r\nb\r\nc\r\n"), 0644)
+		assert.NoError(t, err)
+		tr, id := newTracker(p)
+
+		reader := &TailReader{FileId: id, FileManager: tr, Separator: "\r\n"}
+		var lines []string
+		err = reader.ReadOnce(func(s string) { lines = append(lines, s) })
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"a", "b", "c"}, lines)
+		// Offset should equal total bytes including separators
+		assert.Equal(t, int64(len([]byte("a\r\nb\r\nc\r\n"))), reader.Offset)
+
+		// Restart from stored offset: should read nothing new
+		reader2 := &TailReader{FileId: id, FileManager: tr, Separator: "\r\n", Offset: reader.Offset}
+		var lines2 []string
+		err = reader2.ReadOnce(func(s string) { lines2 = append(lines2, s) })
+		assert.NoError(t, err)
+		assert.Empty(t, lines2)
+	})
+
+	t.Run("Custom token separator <END>", func(t *testing.T) {
+		p := filepath.Join(baseDir, "token.txt")
+		content := "part1<END>part2<END>part3<END>"
+		assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+		tr, id := newTracker(p)
+
+		reader := &TailReader{FileId: id, FileManager: tr, Separator: "<END>"}
+		var items []string
+		err := reader.ReadOnce(func(s string) { items = append(items, s) })
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"part1", "part2", "part3"}, items)
+		assert.Equal(t, int64(len(content)), reader.Offset)
+
+		// Append more data and simulate restart with restored offset
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0644)
+		assert.NoError(t, err)
+		_, err = f.WriteString("part4<END>part5<END>")
+		assert.NoError(t, err)
+		_ = f.Close()
+
+		tr2, id2 := newTracker(p)
+		reader2 := &TailReader{FileId: id2, FileManager: tr2, Separator: "<END>", Offset: reader.Offset}
+		var items2 []string
+		err = reader2.ReadOnce(func(s string) { items2 = append(items2, s) })
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"part4", "part5"}, items2)
+	})
+}
+
 func TestTailReader_Integration(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skip inode-based tailer tests on Windows")
@@ -36,7 +105,7 @@ func TestTailReader_Integration(t *testing.T) {
 		reader := &TailReader{
 			FileId:      fileId,
 			FileManager: tracker,
-			Separator:   '\n',
+			Separator:   "\n",
 		}
 
 		lines := make([]string, 0)
@@ -52,7 +121,7 @@ func TestTailReader_Integration(t *testing.T) {
 		reader := &TailReader{
 			FileId:      fileId,
 			FileManager: tracker,
-			Separator:   '\n',
+			Separator:   "\n",
 			Offset:      6, // After "line1\n"
 		}
 
@@ -69,7 +138,7 @@ func TestTailReader_Integration(t *testing.T) {
 		reader := &TailReader{
 			FileId:      fileId,
 			FileManager: tracker,
-			Separator:   '\n',
+			Separator:   "\n",
 		}
 
 		var wg sync.WaitGroup
@@ -126,7 +195,7 @@ func TestTailReader_Integration(t *testing.T) {
 		reader := &TailReader{
 			FileId:      largeId,
 			FileManager: tracker,
-			Separator:   '\n',
+			Separator:   "\n",
 		}
 
 		lineCount := 0
@@ -159,7 +228,7 @@ func TestTailReader_Cleanup(t *testing.T) {
 	reader := &TailReader{
 		FileId:      fileId,
 		FileManager: tracker,
-		Separator:   '\n',
+		Separator:   "\n",
 	}
 
 	err = reader.open()
@@ -170,4 +239,38 @@ func TestTailReader_Cleanup(t *testing.T) {
 	reader.cleanup()
 	assert.Nil(t, reader.file)
 	assert.Nil(t, reader.reader)
+}
+
+func TestTailReader_OpenWithChecksum_SuccessAndMismatch(t *testing.T) {
+	base := t.TempDir()
+	p := filepath.Join(base, "chk.txt")
+	// create content longer than 16 bytes
+	content := []byte("line1\nline2\nline3\n")
+	assert.NoError(t, os.WriteFile(p, content, 0644))
+
+	// compute expected fingerprint for first 16 bytes
+	const size = 16
+	fp, err := file_tracker.GetFileFingerprintFromPath(p, size)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, fp)
+
+	// create tracker and register with checksum strategy
+	tr := file_tracker.New()
+	tr.Add(fp, p, watcher.FingerprintStrategyChecksum, int64(size), 0)
+
+	// success path: correct id
+	reader := &TailReader{FileId: fp, FileManager: tr, Separator: "\n"}
+	var lines []string
+	err = reader.ReadOnce(func(s string) { lines = append(lines, s) })
+	assert.NoError(t, err)
+	// Should read all full lines available
+	assert.Equal(t, []string{"line1", "line2", "line3"}, lines)
+
+	// mismatch path: wrong id should error on open()
+	wrongId := "deadbeef"
+	tr2 := file_tracker.New()
+	tr2.Add(wrongId, p, watcher.FingerprintStrategyChecksum, int64(size), 0)
+	reader2 := &TailReader{FileId: wrongId, FileManager: tr2, Separator: "\n"}
+	err = reader2.ReadOnce(func(s string) {})
+	assert.Error(t, err)
 }
