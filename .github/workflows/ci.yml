@@ -48,15 +48,33 @@ jobs:
           name: coverage-${{ matrix.os }}
           path: coverage.out
 
+      - name: Extract coverage percentage (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        id: coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          LINE=$(go tool cover -func=coverage.out | tail -n 1)
+          # Expected format: total:\t(statements)\tNN.N%
+          PCT=$(echo "$LINE" | awk '{print $3}')
+          PCT_NUM=${PCT%%%}
+          # Determine badge color
+          if [ "${PCT_NUM%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT_NUM%.*}" -ge 60 ]; then COLOR=yellow; else COLOR=red; fi
+          echo "COVERAGE=$PCT_NUM" >> "$GITHUB_ENV"
+          echo "BADGE_COLOR=$COLOR" >> "$GITHUB_ENV"
+
       - name: Generate coverage badge (ubuntu-latest, push only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: tj-actions/coverage-badge-go@v2
+        uses: emibcn/badge-action@v2
         with:
-          filename: coverage.out
+          label: Coverage
+          status: "${{ env.COVERAGE }}%"
+          color: "${{ env.BADGE_COLOR }}"
+          path: coverage-badge.svg
 
       - name: Commit coverage badge (ubuntu-latest, push only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(ci): update coverage badge"
-          file_pattern: coverage.out coverage-badge.svg
+          file_pattern: .
