@@ -6,37 +6,17 @@ import (
 	"time"
 
 	"github.com/loykin/freader"
+	"github.com/loykin/freader/cmd/freader/metrics"
 	"github.com/loykin/freader/internal/collector"
+
+	cmdclick "github.com/loykin/freader/cmd/freader/sink/clickhouse"
+	cmdconsole "github.com/loykin/freader/cmd/freader/sink/console"
+	cmdfile "github.com/loykin/freader/cmd/freader/sink/file"
+	cmdos "github.com/loykin/freader/cmd/freader/sink/opensearch"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-// SinkClickHouse holds ClickHouse sink connection settings.
-type SinkClickHouse struct {
-	Addr     string `mapstructure:"addr"` // http(s)://host:8123 or native host:9000
-	Database string `mapstructure:"database"`
-	Table    string `mapstructure:"table"` // table or db.table
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-}
-
-// SinkOpenSearch holds OpenSearch sink connection settings.
-type SinkOpenSearch struct {
-	URL      string `mapstructure:"url"` // http(s)://host:9200
-	Index    string `mapstructure:"index"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-}
-
-// SinkFile holds forwarding configuration and nested backend settings.
-type SinkFile struct {
-	Path string `mapstructure:"path"`
-}
-
-type SinkConsole struct {
-	Stream string `mapstructure:"stream"` // stdout or stderr
-}
 
 type SinkConfig struct {
 	Type          string            `mapstructure:"type"` // "" (disabled), "console", "stdout", "stderr", "file", "clickhouse", "opensearch"
@@ -46,17 +26,10 @@ type SinkConfig struct {
 	BatchInterval time.Duration     `mapstructure:"batch-interval"`
 	Host          string            `mapstructure:"host"`   // override host; default os.Hostname()
 	Labels        map[string]string `mapstructure:"labels"` // optional key-value labels
-
-	Console    SinkConsole    `mapstructure:"console"`
-	ClickHouse SinkClickHouse `mapstructure:"clickhouse"`
-	OpenSearch SinkOpenSearch `mapstructure:"opensearch"`
-	File       SinkFile       `mapstructure:"file"`
-}
-
-// PrometheusConfig holds metrics endpoint options.
-type PrometheusConfig struct {
-	Enable bool   `mapstructure:"enable"`
-	Addr   string `mapstructure:"addr"`
+	Console       cmdconsole.Config `mapstructure:"console"`
+	ClickHouse    cmdclick.Config   `mapstructure:"clickhouse"`
+	OpenSearch    cmdos.Config      `mapstructure:"opensearch"`
+	File          cmdfile.Config    `mapstructure:"file"`
 }
 
 // Config holds all configuration options for the freader application
@@ -69,7 +42,7 @@ type Config struct {
 	// Forwarding sink (nested and unified output)
 	Sink SinkConfig `mapstructure:"sink"`
 	// Metrics/Prometheus options
-	Prometheus PrometheusConfig `mapstructure:"prometheus"`
+	Prometheus metrics.Config `mapstructure:"prometheus"`
 }
 
 // LoadFromViper binds flags to viper, reads file/env, and populates the Config fields via mapstructure.
@@ -113,9 +86,9 @@ func DefaultConfig() *Config {
 			BatchSize:     200,
 			BatchInterval: 2 * time.Second,
 			Labels:        map[string]string{},
-			Console:       SinkConsole{Stream: "stdout"},
+			Console:       cmdconsole.Config{Stream: "stdout"},
 		},
-		Prometheus: PrometheusConfig{Enable: false, Addr: ":2112"},
+		Prometheus: metrics.Config{Enable: false, Addr: ":2112"},
 	}
 	// Initialize nested collector defaults
 	cfg.Collector.Default()
@@ -174,24 +147,23 @@ func (c *Config) Validate() error {
 		if c.Sink.BatchInterval <= 0 {
 			return fmt.Errorf("sink.batch-interval must be > 0")
 		}
-		// Validate console stream if used
-		if c.Sink.Type == "console" {
-			if c.Sink.Console.Stream != "" && c.Sink.Console.Stream != "stdout" && c.Sink.Console.Stream != "stderr" {
-				return fmt.Errorf("sink.console.stream must be 'stdout' or 'stderr'")
-			}
-		}
+		// Delegate sink-specific validations to each sink config
 		switch c.Sink.Type {
-		case "clickhouse":
-			if c.Sink.ClickHouse.Addr == "" || c.Sink.ClickHouse.Table == "" {
-				return fmt.Errorf("sink.clickhouse requires addr and table")
-			}
-		case "opensearch":
-			if c.Sink.OpenSearch.URL == "" || c.Sink.OpenSearch.Index == "" {
-				return fmt.Errorf("sink.opensearch requires url and index")
+		case "console":
+			if err := c.Sink.Console.Validate(); err != nil {
+				return err
 			}
 		case "file":
-			if c.Sink.File.Path == "" {
-				return fmt.Errorf("sink.file.path must be set when sink.type is 'file'")
+			if err := c.Sink.File.Validate(); err != nil {
+				return err
+			}
+		case "clickhouse":
+			if err := c.Sink.ClickHouse.Validate(); err != nil {
+				return err
+			}
+		case "opensearch":
+			if err := c.Sink.OpenSearch.Validate(); err != nil {
+				return err
 			}
 		}
 	}
