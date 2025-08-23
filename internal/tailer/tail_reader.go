@@ -50,6 +50,11 @@ func (t *TailReader) open() error {
 		if err != nil {
 			return err
 		}
+	case watcher.FingerprintStrategyChecksumSeperator:
+		fileId, err = file_tracker.GetFileFingerprintUntilNSeparators(file, t.Separator, int(fileInfo.FingerprintSize))
+		if err != nil {
+			return err
+		}
 	case watcher.FingerprintStrategyDeviceAndInode:
 		stat, err := file.Stat()
 		if err != nil {

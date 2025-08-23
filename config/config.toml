@@ -6,6 +6,7 @@
 # Alternatively, set FREADER_CONFIG environment variable to point to this file:
 #   export FREADER_CONFIG=./config/config.toml
 
+[collector]
 # Directories/files to include (globs or exact paths)
 include = ["./examples/embeded/log", "./examples/embeded/log/*.log"]
 # Optional exclude patterns
@@ -13,6 +14,8 @@ exclude = ["*.tmp", "*.bak"]
 
 # Polling interval for file scanning (Go duration format)
 poll-interval = "2s"
+# Record separator string (supports multi-byte, e.g., "\r\n" or tokens like "<END>")
+separator = "\n"
 
 # Fingerprint settings
 # "checksum" (requires fingerprint-size > 0) or "deviceAndInode"
@@ -21,6 +24,9 @@ fingerprint-size = 1024
 
 # Number of worker goroutines to read files
 workers = 1
+# Offsets store options
+# db-path = "collector.db"
+# store-offsets = true
 
 [sink]
 # Type: "" (disabled), "console", "stdout", "stderr", "file", "clickhouse", or "opensearch"

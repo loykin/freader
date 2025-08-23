@@ -82,17 +82,7 @@ func runCollector(config *Config) error {
 		metricsStop = stopFn
 	}
 
-	// Create configuration
-	cfg := freader.Config{}
-	cfg.Default()
-	// Use include-only filtering
-	cfg.Include = config.Include
-	cfg.FingerprintSize = config.FingerprintSize
-	cfg.PollInterval = config.PollInterval
-	cfg.FingerprintStrategy = config.FingerprintStrategy
-	cfg.WorkerCount = config.WorkerCount
-	cfg.Exclude = config.Exclude
-	// Optional external sink (clickhouse/opensearch)
+	// Start optional external sink (clickhouse/opensearch)
 	sink, err := buildSink(config)
 	if err != nil {
 		return fmt.Errorf("failed to build sink: %w", err)
@@ -101,6 +91,8 @@ func runCollector(config *Config) error {
 		defer func() { _ = sink.Stop() }()
 	}
 
+	// Prepare collector configuration from nested config
+	cfg := config.Collector
 	cfg.OnLineFunc = func(line string) {
 		if sink != nil {
 			// When a sink is configured (stdout/opensearch/clickhouse), it is the single output path.

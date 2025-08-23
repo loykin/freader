@@ -1017,3 +1017,172 @@ func TestCollector_Checksum_SeparatorVariants_WindowsFriendly(t *testing.T) {
 		mu.Unlock()
 	})
 }
+
+func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
+	base := t.TempDir()
+
+	// CRLF variant (Windows-friendly)
+	t.Run("CRLF checksumSeperator", func(t *testing.T) {
+		p := filepath.Join(base, "crlf_sep.log")
+		assert.NoError(t, os.WriteFile(p, []byte("a\r\nb\r\n"), 0644))
+
+		var mu sync.Mutex
+		var lines []string
+		cfg := Config{
+			Include:             []string{p},
+			PollInterval:        50 * time.Millisecond,
+			WorkerCount:         1,
+			Separator:           "\r\n",
+			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeperator,
+			FingerprintSize:     2, // N separators to include in fingerprint
+			OnLineFunc: func(s string) {
+				mu.Lock()
+				defer mu.Unlock()
+				lines = append(lines, s)
+			},
+		}
+		c, err := NewCollector(cfg)
+		assert.NoError(t, err)
+		c.Start()
+		defer c.Stop()
+
+		deadline := time.After(2 * time.Second)
+		for {
+			mu.Lock()
+			n := len(lines)
+			mu.Unlock()
+			if n >= 2 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("timeout waiting for initial CRLF lines: got %d", n)
+			default:
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0644)
+		assert.NoError(t, err)
+		_, err = f.WriteString("c\r\n")
+		assert.NoError(t, err)
+		_ = f.Close()
+
+		deadline = time.After(2 * time.Second)
+		for {
+			mu.Lock()
+			n := len(lines)
+			mu.Unlock()
+			if n >= 3 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("timeout waiting for appended CRLF line")
+			default:
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+
+		mu.Lock()
+		assert.Equal(t, []string{"a", "b", "c"}, lines)
+		mu.Unlock()
+	})
+
+	// Restart with partial using custom token <END>
+	t.Run("ChecksumSeperator restart no-loss", func(t *testing.T) {
+		p := filepath.Join(base, "token_sep.log")
+		initial := "a<END>b<END>c"
+		assert.NoError(t, os.WriteFile(p, []byte(initial), 0644))
+
+		dbPath := filepath.Join(base, "token_sep_offsets.db")
+		var mu1 sync.Mutex
+		var got1 []string
+		cfg1 := Config{
+			Include:             []string{p},
+			PollInterval:        50 * time.Millisecond,
+			WorkerCount:         1,
+			Separator:           "<END>",
+			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeperator,
+			FingerprintSize:     2, // need two separators to fingerprint
+			OnLineFunc: func(s string) {
+				mu1.Lock()
+				defer mu1.Unlock()
+				got1 = append(got1, s)
+			},
+			DBPath:       dbPath,
+			StoreOffsets: true,
+		}
+		c1, err := NewCollector(cfg1)
+		assert.NoError(t, err)
+		c1.Start()
+
+		deadline := time.After(2 * time.Second)
+		for {
+			mu1.Lock()
+			n := len(got1)
+			mu1.Unlock()
+			if n >= 2 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("timeout waiting for first run tokens")
+			default:
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+		c1.Stop()
+
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0644)
+		assert.NoError(t, err)
+		_, err = f.WriteString("<END>d<END>")
+		assert.NoError(t, err)
+		_ = f.Close()
+
+		var mu2 sync.Mutex
+		var got2 []string
+		cfg2 := Config{
+			Include:             []string{p},
+			PollInterval:        50 * time.Millisecond,
+			WorkerCount:         1,
+			Separator:           "<END>",
+			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeperator,
+			FingerprintSize:     2,
+			OnLineFunc: func(s string) {
+				mu2.Lock()
+				defer mu2.Unlock()
+				got2 = append(got2, s)
+			},
+			DBPath:       dbPath,
+			StoreOffsets: true,
+		}
+		c2, err := NewCollector(cfg2)
+		assert.NoError(t, err)
+		c2.Start()
+		defer c2.Stop()
+
+		deadline = time.After(3 * time.Second)
+		for {
+			mu2.Lock()
+			n := len(got2)
+			mu2.Unlock()
+			if n >= 2 {
+				break
+			}
+			select {
+			case <-deadline:
+				t.Fatalf("timeout waiting for second run tokens")
+			default:
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+
+		mu1.Lock()
+		assert.Equal(t, []string{"a", "b"}, got1)
+		mu1.Unlock()
+		mu2.Lock()
+		assert.Equal(t, []string{"c", "d"}, got2)
+		mu2.Unlock()
+	})
+}

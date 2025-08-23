@@ -332,3 +332,60 @@ func TestWatcher_ChecksumEmitsCorrectID(t *testing.T) {
 		}
 	}
 }
+
+func TestWatcher_ChecksumSeperator_EmitsCorrectID(t *testing.T) {
+	base := t.TempDir()
+	p := filepath.Join(base, "watch_sep.txt")
+	content := "a\n b\n c\n"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	// Expect fingerprint up to and including the first two newlines ("\n")
+	expected, err := file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, "\n", 2)
+	assert.NoError(t, err)
+
+	ft := file_tracker.New()
+	var gotID atomic.Value // string
+
+	cfg := Config{
+		Include:              []string{base},
+		PollInterval:         20 * time.Millisecond,
+		FingerprintStrategy:  FingerprintStrategyChecksumSeperator,
+		FingerprintSize:      2,
+		FingerprintSeperator: "\n",
+		FileTracker:          ft,
+	}
+	w, err := NewWatcher(cfg, func(id, path string) { gotID.Store(id) }, func(id string) {})
+	assert.NoError(t, err)
+
+	w.Start()
+	defer w.Stop()
+
+	deadline := time.After(1 * time.Second)
+	for {
+		if v := gotID.Load(); v != nil {
+			if id, ok := v.(string); ok {
+				assert.Equal(t, expected, id)
+				break
+			}
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("did not receive file id from watcher (checksumSeperator)")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
+func TestWatcher_ChecksumSeperator_ValidateMissingSeparator(t *testing.T) {
+	cfg := Config{
+		Include:              []string{t.TempDir()},
+		FingerprintStrategy:  FingerprintStrategyChecksumSeperator,
+		FingerprintSize:      2,
+		FingerprintSeperator: "", // missing
+		FileTracker:          file_tracker.New(),
+	}
+	_, err := NewWatcher(cfg, func(id, path string) {}, func(id string) {})
+	assert.Error(t, err)
+	assert.Equal(t, "fingerprint separator must be set for checksumSeperator strategy", err.Error())
+}

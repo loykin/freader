@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/loykin/freader"
+	"github.com/loykin/freader/internal/collector"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -28,7 +29,7 @@ type SinkOpenSearch struct {
 	Password string `mapstructure:"password"`
 }
 
-// SinkConfig holds forwarding configuration and nested backend settings.
+// SinkFile holds forwarding configuration and nested backend settings.
 type SinkFile struct {
 	Path string `mapstructure:"path"`
 }
@@ -59,21 +60,14 @@ type PrometheusConfig struct {
 }
 
 // Config holds all configuration options for the freader application
+// It now uses a nested Collector config for the reader options.
 type Config struct {
 	// Optional config file path (flag/env only)
 	ConfigFile string
-
-	// File monitoring options
-	Include             []string      `mapstructure:"include"`
-	Exclude             []string      `mapstructure:"exclude"`
-	PollInterval        time.Duration `mapstructure:"poll-interval"`
-	FingerprintSize     int           `mapstructure:"fingerprint-size"`
-	FingerprintStrategy string        `mapstructure:"fingerprint-strategy"`
-	WorkerCount         int           `mapstructure:"workers"`
-
+	// Reader/collector configuration (nested)
+	Collector collector.Config `mapstructure:"collector"`
 	// Forwarding sink (nested and unified output)
 	Sink SinkConfig `mapstructure:"sink"`
-
 	// Metrics/Prometheus options
 	Prometheus PrometheusConfig `mapstructure:"prometheus"`
 }
@@ -111,13 +105,7 @@ func (c *Config) LoadFromViper(cmd *cobra.Command) error {
 
 // DefaultConfig returns a Config with default values
 func DefaultConfig() *Config {
-	return &Config{
-		Include:             []string{"./log"},
-		Exclude:             []string{},
-		PollInterval:        2 * time.Second,
-		FingerprintSize:     1024,
-		FingerprintStrategy: "checksum",
-		WorkerCount:         1,
+	cfg := &Config{
 		Sink: SinkConfig{
 			Type:          "console", // default console sink; configure [sink.console.stream]
 			Include:       []string{},
@@ -129,6 +117,16 @@ func DefaultConfig() *Config {
 		},
 		Prometheus: PrometheusConfig{Enable: false, Addr: ":2112"},
 	}
+	// Initialize nested collector defaults
+	cfg.Collector.Default()
+	// Make the quick-start UX pleasant: watch bundled example logs and use checksum
+	cfg.Collector.Include = []string{"./examples/embeded/log", "./examples/embeded/log/*.log"}
+	cfg.Collector.Exclude = []string{}
+	cfg.Collector.PollInterval = 2 * time.Second
+	cfg.Collector.FingerprintStrategy = freader.FingerprintStrategyChecksum
+	cfg.Collector.FingerprintSize = 64
+	cfg.Collector.WorkerCount = 1
+	return cfg
 }
 
 // SetupFlags adds all command line flags to the provided cobra command
@@ -136,15 +134,19 @@ func (c *Config) SetupFlags(cmd *cobra.Command) {
 	// Config file
 	cmd.Flags().StringVar(&c.ConfigFile, "config", c.ConfigFile, "Path to config file (yaml/json/toml)")
 
-	cmd.Flags().StringSliceVarP(&c.Include, "include", "I", c.Include, "Include patterns or directories to monitor (e.g., ./log, /var/log/*.log)")
-	cmd.Flags().StringSliceVarP(&c.Exclude, "exclude", "E", c.Exclude, "Exclude patterns (e.g., *.tmp, *.log)")
-	cmd.Flags().DurationVarP(&c.PollInterval, "poll-interval", "i", c.PollInterval, "Interval to poll for file changes")
-	cmd.Flags().IntVarP(&c.FingerprintSize, "fingerprint-size", "s", c.FingerprintSize, "Size of fingerprint for checksum strategy")
-	cmd.Flags().StringVarP(&c.FingerprintStrategy, "fingerprint-strategy", "f", c.FingerprintStrategy,
+	// Collector flags (write directly into nested struct)
+	cmd.Flags().StringSliceVarP(&c.Collector.Include, "include", "I", c.Collector.Include, "Include patterns or directories to monitor (e.g., ./log, /var/log/*.log)")
+	cmd.Flags().StringSliceVarP(&c.Collector.Exclude, "exclude", "E", c.Collector.Exclude, "Exclude patterns (e.g., *.tmp, *.log)")
+	cmd.Flags().DurationVarP(&c.Collector.PollInterval, "poll-interval", "i", c.Collector.PollInterval, "Interval to poll for file changes")
+	cmd.Flags().StringVar(&c.Collector.Separator, "separator", c.Collector.Separator, "Record separator (string, supports multi-byte like \\\"\\r\\n\\\" or tokens like <END>)")
+	cmd.Flags().IntVarP(&c.Collector.FingerprintSize, "fingerprint-size", "s", c.Collector.FingerprintSize, "Size of fingerprint for checksum strategy (or N separators for checksumSeperator)")
+	cmd.Flags().StringVarP(&c.Collector.FingerprintStrategy, "fingerprint-strategy", "f", c.Collector.FingerprintStrategy,
 		fmt.Sprintf("Fingerprint strategy (%s or %s)",
 			freader.FingerprintStrategyChecksum,
 			freader.FingerprintStrategyDeviceAndInode))
-	cmd.Flags().IntVarP(&c.WorkerCount, "workers", "w", c.WorkerCount, "Number of worker goroutines")
+	cmd.Flags().IntVarP(&c.Collector.WorkerCount, "workers", "w", c.Collector.WorkerCount, "Number of worker goroutines")
+	cmd.Flags().StringVar(&c.Collector.DBPath, "db-path", c.Collector.DBPath, "Path to offsets SQLite DB (when --store-offsets)")
+	cmd.Flags().BoolVar(&c.Collector.StoreOffsets, "store-offsets", c.Collector.StoreOffsets, "Store and restore offsets across restarts")
 
 	// Sink-related options are intentionally not exposed as command-line flags.
 	// Configure sink forwarding (type, filters, batching, and backend credentials)
@@ -197,6 +199,11 @@ func (c *Config) Validate() error {
 	// Basic validation for prometheus addr if enabled
 	if c.Prometheus.Enable && c.Prometheus.Addr == "" {
 		return fmt.Errorf("prometheus.addr must be set when prometheus.enable is true")
+	}
+
+	// Validate nested collector as well
+	if err := c.Collector.Validate(); err != nil {
+		return fmt.Errorf("invalid collector config: %w", err)
 	}
 
 	return nil

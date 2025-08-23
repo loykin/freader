@@ -128,6 +128,7 @@ func NewCollector(cfg Config) (*Collector, error) {
 	config.FileTracker = c.fileManager
 	config.FingerprintStrategy = cfg.FingerprintStrategy
 	config.FingerprintSize = cfg.FingerprintSize
+	config.FingerprintSeperator = cfg.Separator
 	config.Include = cfg.Include
 	config.Exclude = cfg.Exclude
 

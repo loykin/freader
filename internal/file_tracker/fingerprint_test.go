@@ -1,6 +1,8 @@
 package file_tracker
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -214,4 +216,49 @@ func TestFingerprint_Consistency(t *testing.T) {
 		assert.Equal(t, fingerprints[0], fingerprints[i],
 			"Fingerprints should be consistent for the same file and maxBytes")
 	}
+}
+
+func TestGetFileFingerprintUntilNSeparators(t *testing.T) {
+	tempDir := t.TempDir()
+	p := filepath.Join(tempDir, "sep.txt")
+	content := "a<END>b<END>c<END>"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	// Expected: hash of bytes up to and including second <END>
+	secondPos := len("a<END>b<END>")
+	h := sha256.Sum256([]byte(content[:secondPos]))
+	expected := hex.EncodeToString(h[:])
+
+	fp, err := GetFileFingerprintUntilNSeparatorsFromPath(p, "<END>", 2)
+	assert.NoError(t, err)
+	assert.Equal(t, expected, fp)
+
+	// n=3 should hash full content
+	fp3, err := GetFileFingerprintUntilNSeparatorsFromPath(p, "<END>", 3)
+	assert.NoError(t, err)
+	h3 := sha256.Sum256([]byte(content))
+	assert.Equal(t, hex.EncodeToString(h3[:]), fp3)
+}
+
+func TestGetFileFingerprintUntilNSeparators_NotEnough(t *testing.T) {
+	tempDir := t.TempDir()
+	p := filepath.Join(tempDir, "not_enough.txt")
+	content := "x<END>y" // only one separator present
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	_, err := GetFileFingerprintUntilNSeparatorsFromPath(p, "<END>", 2)
+	assert.Error(t, err)
+	assert.True(t, IsNotEnoughSeparators(err))
+}
+
+func TestGetFileFingerprintUntilNSeparators_CRLF(t *testing.T) {
+	tempDir := t.TempDir()
+	p := filepath.Join(tempDir, "crlf.txt")
+	content := "a\r\nb\r\n"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	fp, err := GetFileFingerprintUntilNSeparatorsFromPath(p, "\r\n", 2)
+	assert.NoError(t, err)
+	h := sha256.Sum256([]byte(content))
+	assert.Equal(t, hex.EncodeToString(h[:]), fp)
 }

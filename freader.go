@@ -39,8 +39,9 @@ type TailReader = tailer.TailReader
 
 // Fingerprint strategy constants re-exported for convenient configuration.
 const (
-	FingerprintStrategyChecksum       = watcher.FingerprintStrategyChecksum
-	FingerprintStrategyDeviceAndInode = watcher.FingerprintStrategyDeviceAndInode
+	FingerprintStrategyChecksum          = watcher.FingerprintStrategyChecksum
+	FingerprintStrategyChecksumSeperator = watcher.FingerprintStrategyChecksumSeperator
+	FingerprintStrategyDeviceAndInode    = watcher.FingerprintStrategyDeviceAndInode
 )
 
 // NewCollector constructs a new Collector using the provided configuration.

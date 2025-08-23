@@ -13,19 +13,21 @@ import (
 )
 
 const FingerprintStrategyChecksum = "checksum"
+const FingerprintStrategyChecksumSeperator = "checksumSeperator"
 const FingerprintStrategyDeviceAndInode = "deviceAndInode"
 const DefaultFingerprintStrategySize = 1024
 
 type Watcher struct {
-	FingerprintStrategy string
-	FingerprintSize     int
-	interval            time.Duration
-	callback            func(id, path string)
-	removeCallback      func(id string)
-	stopCh              chan struct{}
-	fileManager         *file_tracker.FileTracker
-	exclude             []string
-	include             []string
+	FingerprintStrategy  string
+	FingerprintSize      int
+	FingerprintSeperator string
+	interval             time.Duration
+	callback             func(id, path string)
+	removeCallback       func(id string)
+	stopCh               chan struct{}
+	fileManager          *file_tracker.FileTracker
+	exclude              []string
+	include              []string
 }
 
 func NewWatcher(config Config, cb func(id, path string), removeCb func(id string)) (*Watcher, error) {
@@ -45,27 +47,22 @@ func NewWatcher(config Config, cb func(id, path string), removeCb func(id string
 		}
 	}
 
-	switch config.FingerprintStrategy {
-	case FingerprintStrategyDeviceAndInode:
-		break
-	case FingerprintStrategyChecksum:
-		if config.FingerprintSize <= 0 {
-			return nil, errors.New("fingerprint size must be greater than 0")
-		}
-	default:
-		return nil, errors.New("unsupported fingerprint strategy: " + config.FingerprintStrategy)
+	// Validate strategy-specific requirements via Config.Validate
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	return &Watcher{
-		interval:            config.PollInterval,
-		callback:            cb,
-		FingerprintStrategy: config.FingerprintStrategy,
-		FingerprintSize:     config.FingerprintSize,
-		removeCallback:      removeCb,
-		stopCh:              make(chan struct{}),
-		fileManager:         config.FileTracker,
-		exclude:             config.Exclude,
-		include:             config.Include,
+		interval:             config.PollInterval,
+		callback:             cb,
+		FingerprintStrategy:  config.FingerprintStrategy,
+		FingerprintSize:      config.FingerprintSize,
+		FingerprintSeperator: config.FingerprintSeperator,
+		removeCallback:       removeCb,
+		stopCh:               make(chan struct{}),
+		fileManager:          config.FileTracker,
+		exclude:              config.Exclude,
+		include:              config.Include,
 	}, nil
 }
 
@@ -194,6 +191,14 @@ func (w *Watcher) scan() {
 					return nil
 				} else if err != nil {
 					slog.Warn("failed to get file fingerprint", "path", p, "error", err)
+					return nil
+				}
+			case FingerprintStrategyChecksumSeperator:
+				fileId, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeperator, w.FingerprintSize)
+				if file_tracker.IsNotEnoughSeparators(err) {
+					return nil
+				} else if err != nil {
+					slog.Warn("failed to get file fingerprint (seperator)", "path", p, "error", err)
 					return nil
 				}
 			case FingerprintStrategyDeviceAndInode:
