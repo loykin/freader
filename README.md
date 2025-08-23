@@ -1,5 +1,4 @@
 # freader
-![Coverage](https://img.shields.io/badge/Coverage-1-red)
 
 [![Coverage](./coverage-badge.svg)](./coverage-badge.svg)
 
