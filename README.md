@@ -1,5 +1,7 @@
 # freader
 
+[![Coverage](./coverage-badge.svg)](./coverage-badge.svg)
+
 A lightweight and reliable file log collector written in Go. It can be used both as a library (embedded in your app) and as a simple CLI tool.
 
 Features:

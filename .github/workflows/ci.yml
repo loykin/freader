@@ -13,6 +13,8 @@ jobs:
   test:
     name: Build and Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -36,9 +38,25 @@ jobs:
       - name: Run tests
         run: go test -race -covermode=atomic -coverprofile="coverage.out" ./...
 
+      - name: Show coverage summary
+        run: go tool cover -func=coverage.out | tail -n 1
+
       - name: Upload coverage artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.os }}
           path: coverage.out
+
+      - name: Generate coverage badge (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: tj-actions/coverage-badge-go@v2
+        with:
+          filename: coverage.out
+
+      - name: Commit coverage badge (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(ci): update coverage badge"
+          file_pattern: coverage.out coverage-badge.svg README.md
