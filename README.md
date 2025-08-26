@@ -155,3 +155,40 @@ See examples/ for:
 
 
 
+
+## Offset semantics and restart caveats
+
+This project aims for clear, predictable offset behavior. Offsets are measured in bytes from the beginning of the file and generally advance only when a full separator-delimited chunk has been consumed from the file. The following details help you understand edge cases and what to expect after restarts.
+
+- Separator-driven consumption
+  - A "chunk" is the bytes up to and including the configured separator (e.g., "\n", "\r\n", or custom token like "<END>").
+  - Offset advances by the chunk length (including the separator) after the chunk is processed.
+  - Partial data without a trailing separator is not considered a chunk and is not normally counted into the offset.
+
+- ReadOnce (one-shot) behavior at EOF
+  - Without multiline: if the file ends without a trailing separator, the final partial line is not emitted and does not advance the offset. On the next run (or after new data is appended), those bytes will be re-read. This preserves no-loss semantics and avoids skipping data.
+  - With multiline enabled: at EOF, any residual bytes in the reader’s internal buffer are fed into the multiline aggregator, flushed, and delivered. The offset is advanced by the size of these residual bytes. This prevents losing the trailing logical record when files commonly omit a final newline.
+
+- Continuous tailing (Run/readLoop)
+  - Offset advances only when complete chunks are read from the file. Blank lines still advance offset by their separator bytes.
+  - If multiline is enabled and a multiline Timeout flush occurs while the file is idle (EOF), the grouped record is emitted to your callback, but the offset does not change at that moment. The offset will move forward only when the next complete chunk is later read from the file.
+  - Implication: if the process crashes or is restarted after a timeout-flushed record was emitted but before additional data was appended, that last record can be re-emitted after restart (because the offset persisted on disk did not include it). This is an intentional at-least-once behavior in idle periods with multiline timeouts.
+
+- Restarts, stores, and idempotency
+  - Enable offset persistence (see config: collector.store-offsets=true) to resume from the last committed position.
+  - Expect at-least-once delivery in these cases:
+    - Multiline with Timeout in continuous mode, when a record is emitted via timeout flush while the file is idle and no new chunk has been committed yet.
+  - Expect no-loss semantics when:
+    - Using standard line/token separators and not enabling multiline; or in ReadOnce with multiline (residual is committed at EOF).
+  - If your sink requires exactly-once semantics, consider one or more of:
+    - Deduplicate downstream by a content hash, timestamp+sequence, or fingerprint fields.
+    - Increase multiline Timeout so flush-based emissions during idle are rare.
+    - Ensure writers always terminate records with separators to avoid timeout-based grouping.
+
+- Rotation and fingerprints (brief)
+  - The collector uses strategies like device+inode, checksum, or checksumSeperator to detect files robustly across rotations. Offsets are tied to the identified file, not only the path. Ensure the strategy fits your environment.
+
+Practical tips
+- Prefer always-terminated lines (writers always end records with the configured separator). This keeps offsets perfectly aligned with file bytes and simplifies restarts.
+- If you need to capture trailing records without a newline in batch jobs, enable multiline and use ReadOnce; it will include the residual and advance the offset.
+- In services using continuous tailing with multiline, design downstream handling for occasional duplicates in idle periods due to timeout-based flush.

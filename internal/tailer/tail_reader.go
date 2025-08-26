@@ -18,6 +18,8 @@ type TailReader struct {
 	FileId    string
 	Offset    int64
 	Separator string
+	// Optional multiline aggregator; if set, physical lines are grouped into logical records.
+	Multiline *MultilineReader
 	// mu protects access to stopCh and doneCh to avoid data races between Run and Stop
 	mu          sync.Mutex
 	stopCh      chan struct{}
@@ -130,16 +132,46 @@ func (t *TailReader) readLoop(callback func(string)) error {
 			chunk, err := t.readNextChunk()
 			if err != nil {
 				if err == io.EOF {
+					// No new complete chunk. If multiline is enabled, drain any timeout-flushed records.
+					if t.Multiline != nil {
+						for {
+							rec, rerr := t.Multiline.Read()
+							if rerr != nil {
+								break
+							}
+							callback(string(rec))
+						}
+					}
 					time.Sleep(500 * time.Millisecond)
 					continue
 				}
 				return err
 			}
 
-			t.Offset += int64(len(chunk))
-			if len(chunk) > 1 {
-				callback(string(bytes.TrimSuffix(chunk, []byte(t.Separator))))
+			// Process chunk respecting multiline configuration
+			sep := []byte(t.Separator)
+			line := chunk
+			if len(chunk) >= len(sep) {
+				line = chunk[:len(chunk)-len(sep)]
 			}
+
+			if t.Multiline != nil {
+				_ = t.Multiline.Write(line)
+				for {
+					rec, rerr := t.Multiline.Read()
+					if rerr != nil {
+						break
+					}
+					callback(string(rec))
+				}
+			} else {
+				if len(chunk) > len(sep) {
+					callback(string(line))
+				}
+			}
+
+			// Advance offset for consumed chunk
+			t.Offset += int64(len(chunk))
 		}
 	}
 }
@@ -154,16 +186,59 @@ func (t *TailReader) ReadOnce(callback func(string)) error {
 		chunk, err := t.readNextChunk()
 		if err != nil {
 			if err == io.EOF {
+				// EOF for one-shot read. If there's residual data in our buffer (no trailing separator),
+				// account for it in the offset and deliver it appropriately.
+				// If multiline configured, flush residual aggregated record(s) and drain them.
+				if t.Multiline != nil {
+					var residual []byte
+					if len(t.buf) > 0 {
+						residual = append([]byte(nil), t.buf...)
+						// clear buffer as we're consuming it now
+						t.buf = nil
+						_ = t.Multiline.Write(residual)
+						// advance offset by the unread bytes we've buffered
+						t.Offset += int64(len(residual))
+					}
+					t.Multiline.Flush()
+					for {
+						rec, rerr := t.Multiline.Read()
+						if rerr != nil {
+							break
+						}
+						callback(string(rec))
+					}
+				}
 				return nil
 			}
 			return err
 		}
+
+		// multipline flush, get
+		sep := []byte(t.Separator)
+		line := chunk
+		if len(chunk) >= len(sep) {
+			line = chunk[:len(chunk)-len(sep)]
+		}
+
+		if t.Multiline != nil {
+			// Feed the physical line into the multiline aggregator and drain any ready records.
+			_ = t.Multiline.Write(line)
+			for {
+				rec, rerr := t.Multiline.Read()
+				if rerr != nil {
+					break
+				}
+				callback(string(rec))
+			}
+		} else {
+			// If not using multiline, emit the single logical line when there is content beyond the separator.
+			if len(chunk) > len(sep) {
+				callback(string(line))
+			}
+		}
+
 		// Always advance offset for consumed chunk, even if it's just a separator (blank line)
 		t.Offset += int64(len(chunk))
-		sep := []byte(t.Separator)
-		if len(chunk) > len(sep) {
-			callback(string(chunk[:len(chunk)-len(sep)]))
-		}
 	}
 }
 
