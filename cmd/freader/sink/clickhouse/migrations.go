@@ -14,7 +14,7 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-// Expose embedded migration content for testing purposes.
+// ReadEmbeddedMigration Expose embedded migration content for testing purposes.
 func ReadEmbeddedMigration(name string) (string, error) {
 	b, err := migrationFS.ReadFile("migrations/" + name)
 	if err != nil {

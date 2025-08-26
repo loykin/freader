@@ -1,0 +1,6 @@
+ERROR Something failed
+    at com.example.App.main(App.java:10)
+Caused by: java.lang.IllegalStateException: bad
+    at com.example.Service.call(Service.java:42)
+INFO next record
+    at com.example.Other.run(Other.java:5)

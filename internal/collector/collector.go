@@ -163,6 +163,7 @@ func NewCollector(cfg Config) (*Collector, error) {
 				FileId:      id,
 				Offset:      offset,
 				Separator:   c.cfg.Separator,
+				Multiline:   c.cfg.Multiline,
 				FileManager: c.fileManager,
 			}
 			slog.Debug("file added", "file", id, "path", path, "offset", offset)

@@ -28,6 +28,20 @@ workers = 1
 # db-path = "collector.db"
 # store-offsets = true
 
+# Multiline settings (optional). If omitted, multiline grouping is disabled.
+# You can either specify explicit patterns or enable the Java preset.
+# See README for semantics and timeout caveats.
+#
+# [collector.multiline]
+# # Explicit configuration
+# mode = "continueThrough"         # one of: continueThrough, continuePast, haltBefore, haltWith
+# start-pattern = "^(INFO|WARN|ERROR)"
+# condition-pattern = "^\\s"        # lines that continue the record (e.g., indented)
+# timeout = "500ms"                  # flush current record if idle for this duration
+#
+# # Or Java preset (will set sensible defaults unless you override them above)
+# # java = true
+
 [sink]
 # Type: "" (disabled), "console", "stdout", "stderr", "file", "clickhouse", or "opensearch"
 # Recommended: use "console" with [sink.console.stream] = stdout|stderr

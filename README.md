@@ -103,6 +103,80 @@ Environment variables are also supported (uppercase; nested keys use `__`). Exam
 - `FREADER_SINK__TYPE=clickhouse`
 - `FREADER_SINK__CLICKHOUSE__ADDR=http://localhost:8123`
 
+### 2.1) Multiline aggregation
+
+Multiline grouping lets you combine multiple physical lines into a single logical record. This is useful for stack traces or logs where continuation lines are indented.
+
+Configure it in your config file under [collector.multiline]:
+
+```toml
+[collector]
+separator = "\n"
+
+  [collector.multiline]
+  # Modes: continuePast | continueThrough | haltBefore | haltWith
+  mode = "continueThrough"
+  # Start of a new record; lines that do not match will be emitted as standalone
+  start-pattern = "^(INFO|WARN|ERROR)"
+  # Lines matching this pattern are considered continuation lines
+  condition-pattern = "^\\s"        # leading whitespace indicates continuation
+  # How long to wait for more lines before flushing a grouped record
+  timeout = "500ms"
+
+  # Optional preset for Java-style stack traces; fills sane defaults if present
+  # java = true
+```
+
+Java preset example (fills defaults if fields are not explicitly set):
+
+```toml
+[collector]
+separator = "\n"
+
+  [collector.multiline]
+  java = true
+  # Equivalent to:
+  # mode = "continueThrough"
+  # start-pattern = "^(ERROR|WARN|INFO|Exception)"
+  # condition-pattern = "^(\\s|at\\s|Caused by:)"
+  # timeout = "500ms"
+```
+
+Supported modes (summary):
+- continuePast: keep accumulating while condition matches; when it stops matching, include the non-matching line in the current record, then emit.
+- continueThrough: keep accumulating while condition matches; when it stops, emit the current record and start a new one with the non-matching line (subject to start-pattern).
+- haltBefore: when condition matches, emit the previous record and start a new record with the current line (subject to start-pattern).
+- haltWith: when condition matches, include current line and emit immediately.
+
+Environment variables (kebab-case keys become uppercased with __):
+- FREADER_COLLECTOR__MULTILINE__MODE=continueThrough
+- FREADER_COLLECTOR__MULTILINE__START_PATTERN=^(INFO|WARN|ERROR)
+- FREADER_COLLECTOR__MULTILINE__CONDITION_PATTERN=^\s
+- FREADER_COLLECTOR__MULTILINE__TIMEOUT=500ms
+- FREADER_COLLECTOR__MULTILINE__JAVA=true
+
+Library usage example:
+
+```
+cfg := freader.Config{}
+cfg.Default()
+cfg.Include = []string{"./logs/*.log"}
+
+cfg.Multiline = &freader.MultilineReader{
+    Mode:             freader.MultilineReaderModeContinueThrough,
+    StartPattern:     "^(INFO|WARN|ERROR)",
+    ConditionPattern: "^\\s",
+    Timeout:          500 * time.Millisecond,
+}
+
+c, err := freader.NewCollector(cfg)
+// handle err; start the collector and read grouped records via cfg.OnLineFunc
+```
+
+See also:
+- examples/multiline (runnable example with sample logs)
+- Notes on offsets and restarts with multiline: section “Offset semantics and restart caveats”
+
 ## 3) Embed in your Go application (Library)
 
 Example:

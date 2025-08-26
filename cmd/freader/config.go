@@ -7,8 +7,6 @@ import (
 
 	"github.com/loykin/freader"
 	"github.com/loykin/freader/cmd/freader/metrics"
-	"github.com/loykin/freader/internal/collector"
-
 	cmdclick "github.com/loykin/freader/cmd/freader/sink/clickhouse"
 	cmdconsole "github.com/loykin/freader/cmd/freader/sink/console"
 	cmdfile "github.com/loykin/freader/cmd/freader/sink/file"
@@ -38,7 +36,7 @@ type Config struct {
 	// Optional config file path (flag/env only)
 	ConfigFile string
 	// Reader/collector configuration (nested)
-	Collector collector.Config `mapstructure:"collector"`
+	Collector freader.Config `mapstructure:"collector"`
 	// Forwarding sink (nested and unified output)
 	Sink SinkConfig `mapstructure:"sink"`
 	// Metrics/Prometheus options
@@ -73,6 +71,49 @@ func (c *Config) LoadFromViper(cmd *cobra.Command) error {
 	if err := v.Unmarshal(c); err != nil {
 		return err
 	}
+
+	// Backward/explicit parsing for collector.multiline into a proper MultilineReader
+	// This ensures kebab-case keys like start-pattern map correctly.
+	if sub := v.Sub("collector"); sub != nil {
+		if ml := sub.Sub("multiline"); ml != nil {
+			var raw struct {
+				Mode             string        `mapstructure:"mode"`
+				StartPattern     string        `mapstructure:"start-pattern"`
+				ConditionPattern string        `mapstructure:"condition-pattern"`
+				Timeout          time.Duration `mapstructure:"timeout"`
+				Java             bool          `mapstructure:"java"`
+			}
+			if err := ml.Unmarshal(&raw); err != nil {
+				return err
+			}
+			// If any field is provided (or java preset), build the reader
+			if raw.Mode != "" || raw.StartPattern != "" || raw.ConditionPattern != "" || raw.Timeout > 0 || raw.Java {
+				mr := &freader.MultilineReader{}
+				if raw.Java {
+					// Apply Java-style presets if not explicitly set
+					if raw.Mode == "" {
+						raw.Mode = freader.MultilineReaderModeContinueThrough
+					}
+					if raw.StartPattern == "" {
+						raw.StartPattern = "^(ERROR|WARN|INFO|Exception)"
+					}
+					if raw.ConditionPattern == "" {
+						raw.ConditionPattern = "^(\\s|at\\s|Caused by:)"
+					}
+					if raw.Timeout <= 0 {
+						raw.Timeout = 500 * time.Millisecond
+					}
+				}
+				// Assign from raw
+				mr.Mode = raw.Mode
+				mr.StartPattern = raw.StartPattern
+				mr.ConditionPattern = raw.ConditionPattern
+				mr.Timeout = raw.Timeout
+				c.Collector.Multiline = mr
+			}
+		}
+	}
+
 	return nil
 }
 

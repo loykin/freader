@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/loykin/freader/internal/tailer"
 	"github.com/loykin/freader/internal/watcher"
 
 	"github.com/stretchr/testify/assert"
@@ -1185,4 +1186,243 @@ func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
 		assert.Equal(t, []string{"c", "d"}, got2)
 		mu2.Unlock()
 	})
+}
+
+func TestCollector_Multiline_Grouping(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// device+inode watcher path is skipped on Windows in other tests too
+		t.Skip("skip inode-based collector tests on Windows")
+	}
+	base := t.TempDir()
+	p := filepath.Join(base, "ml_grouping_collect.log")
+	content := "INFO start\n  a\n  b\nERROR head\n  e1\n"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	var mu sync.Mutex
+	var out []string
+	cfg := Config{
+		Include:             []string{p},
+		PollInterval:        50 * time.Millisecond,
+		WorkerCount:         1,
+		Separator:           "\n",
+		FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
+		Multiline: &tailer.MultilineReader{
+			Mode:             tailer.MultilineReaderModeContinueThrough,
+			StartPattern:     "^(INFO|ERROR)",
+			ConditionPattern: "^\\s",
+			Timeout:          500 * time.Millisecond,
+		},
+		OnLineFunc: func(s string) {
+			mu.Lock()
+			defer mu.Unlock()
+			out = append(out, s)
+		},
+	}
+	c, err := NewCollector(cfg)
+	assert.NoError(t, err)
+	c.Start()
+	defer c.Stop()
+
+	deadline := time.After(3 * time.Second)
+	for {
+		mu.Lock()
+		n := len(out)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for multiline grouped records; got %d", n)
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	// Order may be by file order; verify both expected groupings are present regardless of order
+	joined := strings.Join(out, "\n---\n")
+	assert.Contains(t, joined, "INFO start\n  a\n  b")
+	assert.Contains(t, joined, "ERROR head\n  e1")
+	mu.Unlock()
+}
+
+func TestCollector_Multiline_EOFResidual(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
+	base := t.TempDir()
+	p := filepath.Join(base, "ml_eof_residual_collect.log")
+	// No trailing newline on the last continuation line
+	content := "ERROR start\n  d1"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	var mu sync.Mutex
+	var out []string
+	cfg := Config{
+		Include:             []string{p},
+		PollInterval:        50 * time.Millisecond,
+		WorkerCount:         1,
+		Separator:           "\n",
+		FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
+		Multiline: &tailer.MultilineReader{
+			Mode:             tailer.MultilineReaderModeContinueThrough,
+			StartPattern:     "^(ERROR|INFO)",
+			ConditionPattern: "^\\s",
+			Timeout:          time.Second,
+		},
+		OnLineFunc: func(s string) {
+			mu.Lock()
+			defer mu.Unlock()
+			out = append(out, s)
+		},
+	}
+	c, err := NewCollector(cfg)
+	assert.NoError(t, err)
+	c.Start()
+	defer c.Stop()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(out)
+		mu.Unlock()
+		if n >= 1 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for residual multiline record")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	// Expect the residual record to be emitted as a single grouped record
+	assert.Contains(t, out, "ERROR start\n  d1")
+	mu.Unlock()
+}
+
+// Java-style stack trace grouping through Collector: ensure Java logs are collected as single records
+func TestCollector_JavaLogs_Multiline_Grouping(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
+	base := t.TempDir()
+	p := filepath.Join(base, "java_stack.log")
+	content := strings.Join([]string{
+		"ERROR Something failed",
+		"    at com.example.App.main(App.java:10)",
+		"Caused by: java.lang.IllegalStateException: bad",
+		"    at com.example.Service.call(Service.java:42)",
+		"INFO next record",
+		"    at com.example.Other.run(Other.java:5)",
+	}, "\n") + "\n"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	var mu sync.Mutex
+	var out []string
+	cfg := Config{
+		Include:             []string{p},
+		PollInterval:        50 * time.Millisecond,
+		WorkerCount:         1,
+		Separator:           "\n",
+		FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
+		Multiline: &tailer.MultilineReader{
+			Mode:             tailer.MultilineReaderModeContinueThrough,
+			StartPattern:     "^(ERROR|WARN|INFO|Exception)",
+			ConditionPattern: "^(\\s|at\\s|Caused by:)",
+			Timeout:          500 * time.Millisecond,
+		},
+		OnLineFunc: func(s string) {
+			mu.Lock()
+			defer mu.Unlock()
+			out = append(out, s)
+		},
+	}
+	c, err := NewCollector(cfg)
+	assert.NoError(t, err)
+	c.Start()
+	defer c.Stop()
+
+	deadline := time.After(3 * time.Second)
+	for {
+		mu.Lock()
+		n := len(out)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for java multiline grouped records; got %d", n)
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	joined := strings.Join(out, "\n---\n")
+	assert.Contains(t, joined, "ERROR Something failed\n    at com.example.App.main(App.java:10)\nCaused by: java.lang.IllegalStateException: bad\n    at com.example.Service.call(Service.java:42)")
+	assert.Contains(t, joined, "INFO next record\n    at com.example.Other.run(Other.java:5)")
+	mu.Unlock()
+}
+
+// Timeout-based flush at Collector level: ensure record is emitted without new data
+func TestCollector_Multiline_TimeoutFlush_Collector(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
+	base := t.TempDir()
+	p := filepath.Join(base, "ml_timeout_collect.log")
+	// Two lines of a record; keep file idle afterwards
+	content := "ERROR start\n  d1\n"
+	assert.NoError(t, os.WriteFile(p, []byte(content), 0644))
+
+	var mu sync.Mutex
+	var out []string
+	cfg := Config{
+		Include:             []string{p},
+		PollInterval:        50 * time.Millisecond,
+		WorkerCount:         1,
+		Separator:           "\n",
+		FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
+		Multiline: &tailer.MultilineReader{
+			Mode:             tailer.MultilineReaderModeContinueThrough,
+			StartPattern:     "^(ERROR|INFO|WARN)",
+			ConditionPattern: "^\\s",
+			Timeout:          80 * time.Millisecond,
+		},
+		OnLineFunc: func(s string) {
+			mu.Lock()
+			defer mu.Unlock()
+			out = append(out, s)
+		},
+	}
+	c, err := NewCollector(cfg)
+	assert.NoError(t, err)
+	c.Start()
+	defer c.Stop()
+
+	// Wait for at least one timeout cycle plus watcher polling
+	deadline := time.After(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(out)
+		mu.Unlock()
+		if n >= 1 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for multiline timeout-flush emission via collector")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	assert.Contains(t, out, "ERROR start\n  d1")
+	mu.Unlock()
 }

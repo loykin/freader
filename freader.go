@@ -37,11 +37,19 @@ func GetFileIDFromPath(path string) (string, error) { return file_tracker.GetFil
 // TailReader re-exports tailer.TailReader for root-level usage.
 type TailReader = tailer.TailReader
 
+// MultilineReader re-exports tailer.MultilineReader so external users don't import internal packages.
+type MultilineReader = tailer.MultilineReader
+
 // Fingerprint strategy constants re-exported for convenient configuration.
 const (
 	FingerprintStrategyChecksum          = watcher.FingerprintStrategyChecksum
 	FingerprintStrategyChecksumSeperator = watcher.FingerprintStrategyChecksumSeperator
 	FingerprintStrategyDeviceAndInode    = watcher.FingerprintStrategyDeviceAndInode
+
+	MultilineReaderModeContinuePast    = tailer.MultilineReaderModeContinuePast
+	MultilineReaderModeContinueThrough = tailer.MultilineReaderModeContinueThrough
+	MultilineReaderModeHaltBefore      = tailer.MultilineReaderModeHaltBefore
+	MultilineReaderModeHaltWith        = tailer.MultilineReaderModeHaltWith
 )
 
 // NewCollector constructs a new Collector using the provided configuration.

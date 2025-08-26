@@ -3,6 +3,7 @@ package collector
 import (
 	"time"
 
+	"github.com/loykin/freader/internal/tailer"
 	"github.com/loykin/freader/internal/watcher"
 )
 
@@ -17,6 +18,9 @@ type Config struct {
 	OnLineFunc          func(line string)
 	DBPath              string
 	StoreOffsets        bool
+	// Multiline optionally configures the multiline aggregator used by tailers.
+	// If nil, multiline grouping is disabled.
+	Multiline *tailer.MultilineReader
 }
 
 func (c *Config) Default() {
@@ -40,6 +44,12 @@ func (c *Config) Validate() error {
 		// Allow empty includes; watcher can still run but will find nothing. Not a hard error.
 		// If you want hard enforcement, uncomment the following line:
 		// return errors.New("collector.include must not be empty")
+	}
+	// Multiline validation when provided
+	if c.Multiline != nil {
+		if err := c.Multiline.Validate(); err != nil {
+			return err
+		}
 	}
 	// Build a watcher config to reuse its validation rules
 	wc := watcher.Config{
