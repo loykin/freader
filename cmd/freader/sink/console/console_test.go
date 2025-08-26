@@ -15,13 +15,14 @@ func TestStdoutSink_FlushOnBatchSize(t *testing.T) {
 	// construct internal sink directly to inject writer
 	s := &stdoutSink{batcher: common.NewBatcher(2, time.Hour, nil, nil, "console"), w: &out}
 	s.start()
-	defer func() { _ = s.Stop() }()
 
 	s.Enqueue("line1")
 	s.Enqueue("line2") // triggers immediate flush due to batch size
 
 	// allow goroutine to run
 	time.Sleep(50 * time.Millisecond)
+	// stop the sink to ensure background goroutine finished writing before reading buffer
+	_ = s.Stop()
 
 	got := out.String()
 	if got != "line1\nline2\n" {
