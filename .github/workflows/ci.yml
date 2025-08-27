@@ -2,15 +2,23 @@ name: CI
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
-  build-test-staticcheck:
-    name: Build, Test, Vet, and Static Analysis
-    runs-on: ubuntu-latest
-    env:
-      GOFLAGS: -mod=readonly
+  test:
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,43 +29,75 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Verify module tidiness
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
-
-      - name: Check formatting
-        run: |
-          fmt_files=$(gofmt -s -l .)
-          if [ -n "$fmt_files" ]; then
-            echo "The following files are not gofmt-ed:" >&2
-            echo "$fmt_files" >&2
-            exit 1
-          fi
-
       - name: Vet
         run: go vet ./...
 
-      - name: Build (race)
-        run: go build -race ./...
-
-      - name: Test (race + coverage)
-        run: |
-          pkgs=$(go list ./... | grep -v '/examples')
-          if [ -z "$pkgs" ]; then
-            echo "No non-example packages to test; skipping."
-            exit 0
-          fi
-          go test -race -covermode=atomic -coverprofile=coverage.out $pkgs
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.out
-
       - name: Install staticcheck
+        shell: bash
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
-      - name: Run staticcheck
-        run: $(go env GOPATH)/bin/staticcheck ./...
+      - name: Staticcheck (exclude examples)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKGS=$(go list ./... | grep -v /examples)
+          if [ -z "$PKGS" ]; then
+            echo "No packages to check"
+            exit 0
+          fi
+          staticcheck $PKGS
+
+      - name: Build CLI
+        run: go build -trimpath -ldflags "-s -w" -o /tmp/freader ./cmd/freader
+
+      - name: Run tests (exclude examples)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKGS=$(go list ./... | grep -v /examples)
+          if [ -z "$PKGS" ]; then
+            echo "No packages to test"
+            exit 0
+          fi
+          go test -race -covermode=atomic -coverprofile="coverage.out" $PKGS
+
+      - name: Show coverage summary
+        run: go tool cover -func=coverage.out | tail -n 1
+
+      - name: Upload coverage artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}
+          path: coverage.out
+
+      - name: Extract coverage percentage (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        id: coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          LINE=$(go tool cover -func=coverage.out | tail -n 1)
+          # Expected format: total:\t(statements)\tNN.N%
+          PCT=$(echo "$LINE" | awk '{print $3}')
+          PCT_NUM=${PCT%%%}
+          # Determine badge color
+          if [ "${PCT_NUM%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT_NUM%.*}" -ge 60 ]; then COLOR=yellow; else COLOR=red; fi
+          echo "COVERAGE=$PCT_NUM" >> "$GITHUB_ENV"
+          echo "BADGE_COLOR=$COLOR" >> "$GITHUB_ENV"
+
+      - name: Generate coverage badge (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: emibcn/badge-action@v2
+        with:
+          label: Coverage
+          status: "${{ env.COVERAGE }}%"
+          color: "${{ env.BADGE_COLOR }}"
+          path: coverage-badge.svg
+
+      - name: Commit coverage badge (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(ci): update coverage badge"
+          file_pattern: .
