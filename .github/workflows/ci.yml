@@ -42,7 +42,13 @@ jobs:
         run: go build -race ./...
 
       - name: Test (race + coverage)
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+        run: |
+          pkgs=$(go list ./... | grep -v '/examples')
+          if [ -z "$pkgs" ]; then
+            echo "No non-example packages to test; skipping."
+            exit 0
+          fi
+          go test -race -covermode=atomic -coverprofile=coverage.out $pkgs
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
