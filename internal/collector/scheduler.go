@@ -53,7 +53,7 @@ func (t *TailScheduler) Add(id string, fileTail *tailer.TailReader, update bool)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if update == false {
+	if !update {
 		if _, exists := t.index[id]; exists {
 			slog.Debug("file already exists", "id", id)
 			return

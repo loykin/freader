@@ -166,6 +166,7 @@ func TestCollector_MultipleFiles(t *testing.T) {
 	collector.Start()
 	// Wait until all three files are read (expect 6 lines) or timeout
 	deadline := time.After(2 * time.Second)
+loop:
 	for {
 		mu.Lock()
 		count := len(lines)
@@ -175,7 +176,7 @@ func TestCollector_MultipleFiles(t *testing.T) {
 		}
 		select {
 		case <-deadline:
-			break
+			break loop
 		default:
 			time.Sleep(50 * time.Millisecond)
 		}
