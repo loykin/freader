@@ -92,12 +92,19 @@ jobs:
           set -e
           mkdir -p artifacts
           BASE="freader_${{ github.ref_name }}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          STAGE_DIR="$BASE"
+          mkdir -p "$STAGE_DIR/config"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            cp dist/freader_${{ matrix.goos }}_${{ matrix.goarch }}.exe freader.exe
-            zip -9 "artifacts/${BASE}.zip" freader.exe README.md LICENSE config/config.toml
+            cp "dist/freader_${{ matrix.goos }}_${{ matrix.goarch }}.exe" "$STAGE_DIR/freader.exe"
           else
-            cp dist/freader_${{ matrix.goos }}_${{ matrix.goarch }} freader
-            tar -czf "artifacts/${BASE}.tar.gz" freader README.md LICENSE config/config.toml
+            cp "dist/freader_${{ matrix.goos }}_${{ matrix.goarch }}" "$STAGE_DIR/freader"
+          fi
+          cp README.md LICENSE "$STAGE_DIR/"
+          cp config/config.toml "$STAGE_DIR/config/"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -r -9 "artifacts/${BASE}.zip" "$STAGE_DIR"
+          else
+            tar -czf "artifacts/${BASE}.tar.gz" "$STAGE_DIR"
           fi
 
       - name: Upload artifacts
