@@ -4,10 +4,11 @@
 package main
 
 import (
+	crand "crypto/rand"
 	"fmt"
 	"log"
 	"log/slog"
-	"math/rand"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,18 @@ import (
 	"github.com/loykin/freader"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// secureIntn returns a crypto-secure random int in [0, max). If max <= 0 or an error occurs, returns 0.
+func secureIntn(max int) int {
+	if max <= 0 {
+		return 0
+	}
+	n, err := crand.Int(crand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0
+	}
+	return int(n.Int64())
+}
 
 // runScenario sets up a temporary workspace, writes logs with lumberjack,
 // rotates twice, and confirms freader continues reading after each rotation.
@@ -96,21 +109,21 @@ func runScenario(name, strategy string) error {
 		std.Println("startup line 1")
 		std.Println("startup line 2")
 		for i := 0; i < 10; i++ {
-			std.Printf("PRE line %02d rand=%d\n", i+1, rand.Intn(100000))
+			std.Printf("PRE line %02d rand=%d\n", i+1, secureIntn(100000))
 			time.Sleep(70 * time.Millisecond)
 		}
 
 		slog.Info("forcing rotation #1", "scenario", name)
 		_ = lj.Rotate()
 		for i := 0; i < 15; i++ {
-			std.Printf("POST1 line %02d rand=%d\n", i+1, rand.Intn(100000))
+			std.Printf("POST1 line %02d rand=%d\n", i+1, secureIntn(100000))
 			time.Sleep(70 * time.Millisecond)
 		}
 
 		slog.Info("forcing rotation #2", "scenario", name)
 		_ = lj.Rotate()
 		for i := 0; i < 12; i++ {
-			std.Printf("POST2 line %02d rand=%d\n", i+1, rand.Intn(100000))
+			std.Printf("POST2 line %02d rand=%d\n", i+1, secureIntn(100000))
 			time.Sleep(70 * time.Millisecond)
 		}
 	}()
