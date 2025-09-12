@@ -86,6 +86,11 @@ jobs:
           echo "COVERAGE=$PCT_NUM" >> "$GITHUB_ENV"
           echo "BADGE_COLOR=$COLOR" >> "$GITHUB_ENV"
 
+      - name: Prepare Shields directory (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: mkdir -p shields
+
       - name: Generate coverage badge (ubuntu-latest, push only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         uses: emibcn/badge-action@v2
@@ -93,11 +98,15 @@ jobs:
           label: Coverage
           status: "${{ env.COVERAGE }}%"
           color: "${{ env.BADGE_COLOR }}"
-          path: coverage-badge.svg
+          path: shields/coverage-badge.svg
 
-      - name: Commit coverage badge (ubuntu-latest, push only)
+      - name: Publish Shields to gh-pages (ubuntu-latest, push only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
         with:
-          commit_message: "chore(ci): update coverage badge"
-          file_pattern: .
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: shields
+          destination_dir: shields
+          keep_files: true
+          commit_message: "chore(ci): publish coverage endpoint (Shields)"
