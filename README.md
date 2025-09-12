@@ -1,6 +1,7 @@
 # freader
 
-[![Coverage](./coverage-badge.svg)](./coverage-badge.svg)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/loykin/freader/gh-pages/shields/coverage.json&cacheSeconds=60)](https://github.com/loykin/freader/blob/gh-pages/shields/coverage.json)
+[![Go Report Card](https://goreportcard.com/badge/github.com/loykin/freader)](https://goreportcard.com/report/github.com/loykin/freader)
 
 A lightweight and reliable file log collector written in Go. It can be used both as a library (embedded in your app) and as a simple CLI tool.
 
