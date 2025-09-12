@@ -47,6 +47,37 @@ jobs:
           fi
           staticcheck $PKGS
 
+      - name: Install gosec
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec (static analysis)
+        run: |
+          set -e
+          $(go env GOPATH)/bin/gosec -no-fail -fmt=json -out=gosec-report.json ./...
+
+      - name: Upload gosec report artifact
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gosec-report
+          path: gosec-report.json
+
+      - name: Trivy Scan (Go dependencies)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          format: json
+          output: trivy-report.json
+
+      - name: Upload Trivy report artifact
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: trivy-report
+          path: trivy-report.json
+
       - name: Build CLI
         run: go build -trimpath -ldflags "-s -w" -o /tmp/freader ./cmd/freader
 
@@ -111,3 +142,43 @@ jobs:
           destination_dir: shields
           keep_files: true
           commit_message: "chore(ci): publish coverage endpoint (Shields)"
+
+      - name: Download Trivy report artifact (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: trivy-report
+          path: .
+
+      - name: Prepare Trivy Shields JSON (severity-based) (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mkdir -p shields
+          CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-report.json)
+          HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-report.json)
+          MEDIUM=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' trivy-report.json)
+          LOW=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="LOW")] | length' trivy-report.json)
+
+          TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
+
+          if [ $((CRITICAL + HIGH)) -gt 0 ]; then
+            COLOR=red
+          elif [ $MEDIUM -gt 0 ]; then
+            COLOR=yellow
+          else
+            COLOR=brightgreen
+          fi
+
+          echo "{\"schemaVersion\":1,\"label\":\"Trivy\",\"message\":\"$TOTAL\",\"color\":\"$COLOR\"}" > shields/trivy.json
+
+      - name: Publish Trivy badge to gh-pages (ubuntu-latest, push only)
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: shields
+          destination_dir: shields
+          keep_files: true
+          commit_message: "chore(ci): publish Trivy badge (Shields)"
