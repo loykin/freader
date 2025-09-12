@@ -8,7 +8,7 @@
 
 [collector]
 # Directories/files to include (globs or exact paths)
-include = ["./examples/embeded/log", "./examples/embeded/log/*.log"]
+include = ["./examples/embedded/log", "./examples/embedded/log/*.log"]
 # Optional exclude patterns
 exclude = ["*.tmp", "*.bak"]
 

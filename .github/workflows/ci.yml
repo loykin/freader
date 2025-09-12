@@ -86,19 +86,20 @@ jobs:
           echo "COVERAGE=$PCT_NUM" >> "$GITHUB_ENV"
           echo "BADGE_COLOR=$COLOR" >> "$GITHUB_ENV"
 
-      - name: Prepare Shields directory (ubuntu-latest, push only)
+      - name: Prepare Shields endpoint JSON (ubuntu-latest, push only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         shell: bash
-        run: mkdir -p shields
-
-      - name: Generate coverage badge (ubuntu-latest, push only)
-        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: emibcn/badge-action@v2
-        with:
-          label: Coverage
-          status: "${{ env.COVERAGE }}%"
-          color: "${{ env.BADGE_COLOR }}"
-          path: shields/coverage-badge.svg
+        run: |
+          set -euo pipefail
+          mkdir -p shields
+          cat > shields/coverage.json <<EOF
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${COVERAGE}%",
+            "color": "${BADGE_COLOR}"
+          }
+          EOF
 
       - name: Publish Shields to gh-pages (ubuntu-latest, push only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'

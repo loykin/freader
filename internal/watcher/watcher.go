@@ -198,7 +198,7 @@ func (w *Watcher) scan() {
 				if file_tracker.IsNotEnoughSeparators(err) {
 					return nil
 				} else if err != nil {
-					slog.Warn("failed to get file fingerprint (seperator)", "path", p, "error", err)
+					slog.Warn("failed to get file fingerprint (separator)", "path", p, "error", err)
 					return nil
 				}
 			case FingerprintStrategyDeviceAndInode:

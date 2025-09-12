@@ -73,7 +73,7 @@ Minimal example (nested sections):
 ```toml
 [collector]
 # Target paths
-include = ["./examples/embeded/log", "./examples/embeded/log/*.log"]
+include = ["./examples/embedded/log", "./examples/embedded/log/*.log"]
 exclude = ["*.tmp"]
 
 # Reader options
@@ -213,7 +213,7 @@ func main() {
 ```
 
 See examples/ for:
-- `examples/embeded` — embed directly into an app
+- `examples/embedded` — embed directly into an app
 - `examples/log_reader` — use TailReader only
 - `examples/lumberjack_rotation` — log rotation behavior (device+inode and checksum)
 - `examples/checksum_reader` — simple checksum strategy reader with bundled sample logs

@@ -134,7 +134,8 @@ func DefaultConfig() *Config {
 	// Initialize nested collector defaults
 	cfg.Collector.Default()
 	// Make the quick-start UX pleasant: watch bundled example logs and use checksum
-	cfg.Collector.Include = []string{"./examples/embeded/log", "./examples/embeded/log/*.log"}
+	// Note: directory is named "embedded" in the repository; keep as-is. //nolint:misspell
+	cfg.Collector.Include = []string{"./examples/embedded/log", "./examples/embedded/log/*.log"}
 	cfg.Collector.Exclude = []string{}
 	cfg.Collector.PollInterval = 2 * time.Second
 	cfg.Collector.FingerprintStrategy = freader.FingerprintStrategyChecksum

@@ -1,4 +1,4 @@
-// Example demonstrating how to use the checksumSeperator fingerprint strategy with the Collector
+// Example: using the Nth-separator checksum fingerprint strategy with the Collector
 package main
 
 import (
@@ -10,10 +10,9 @@ import (
 	"github.com/loykin/freader"
 )
 
-// This example reads bundled sample logs under ./examples/checksum_seperator/log using
-// the checksumSeperator fingerprint strategy with a custom token separator ("<END>")
-// and prints collected records. It then appends a couple extra records to demonstrate
-// live updates.
+// This example reads bundled sample logs under the examples directory using a
+// custom token separator ("<END>") and prints collected records. It then appends
+// a couple extra records to demonstrate live updates.
 //
 // Notes:
 //   - FingerprintSize here means the number of separators to include when computing
@@ -23,10 +22,10 @@ func main() {
 	// Verbose logger for demo
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
-	// Path to bundled sample tokens (relative to repo root when running `go run ./examples/checksum_seperator`)
-	include := []string{"./examples/checksum_seperator/log/*.log"}
+	// Path to bundled sample tokens (relative to repo root when running the example)
+	include := []string{"./examples/checksum_seperator/log/*.log"} //nolint:misspell // repo dir name uses this spelling
 
-	// Configure the collector for checksumSeperator tracking
+	// Configure the collector for Nth-separator checksum tracking
 	var cfg freader.Config
 	cfg.Default()           // start from defaults
 	cfg.Include = include   // watch bundled logs
@@ -51,12 +50,12 @@ func main() {
 	defer c.Stop()
 
 	// Give it a moment to discover and read existing bundled lines
-	slog.Info("reading bundled sample logs (checksumSeperator/<END>)...")
+	slog.Info("reading bundled sample logs (<END>)...")
 	time.Sleep(1500 * time.Millisecond)
 
 	// Append a couple of records to the bundled sample to show live updates.
 	func() {
-		path := "./examples/checksum_seperator/log/sample.log"
+		path := "./examples/checksum_seperator/log/sample.log" //nolint:misspell // repo dir name uses this spelling
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			slog.Warn("could not open bundled sample for append (skipping live demo)", "error", err)
@@ -70,5 +69,5 @@ func main() {
 	// Allow time to collect appended lines (if appended)
 	time.Sleep(2 * time.Second)
 
-	slog.Info("checksumSeperator example completed")
+	slog.Info("example completed")
 }
