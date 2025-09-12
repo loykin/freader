@@ -67,6 +67,11 @@ func (c *Config) LoadFromViper(cmd *cobra.Command) error {
 		}
 	}
 
+	// Map select top-level flags to nested collector keys before unmarshal so flags override file
+	if f := cmd.Flags().Lookup("include"); f != nil && f.Changed {
+		v.Set("collector.include", v.GetStringSlice("include"))
+	}
+
 	// Unmarshal into this Config using mapstructure with proper tagname and duration hooks
 	if err := v.Unmarshal(c); err != nil {
 		return err

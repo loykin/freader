@@ -1,8 +1,10 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -167,4 +169,64 @@ func TestSQLiteStore_Errors(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, store)
 	})
+}
+
+// TestNewSQLiteStore_Initialization verifies that NewSQLiteStore creates missing
+// directories, applies migrations, and sets recommended PRAGMAs.
+func TestNewSQLiteStore_Initialization(t *testing.T) {
+	// On Windows, some deeply nested temp paths can exceed MAX_PATH for older tooling;
+	// keep the nesting shallow.
+	tmp := t.TempDir()
+	dbPath := filepath.Join(tmp, "nested", "dir", "collector.db")
+
+	st, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore failed: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	// Open the DB directly to inspect metadata/PRAGMAs.
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite directly: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	// 1) Migrations: offsets table exists
+	var name string
+	row := db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name='offsets'`)
+	if err := row.Scan(&name); err != nil {
+		t.Fatalf("offsets table not found after migrations: %v", err)
+	}
+	if name != "offsets" {
+		t.Fatalf("unexpected table name: %q", name)
+	}
+
+	// 2) Goose version table exists (custom name in code: freader_db_version)
+	name = ""
+	row = db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name='freader_db_version'`)
+	if err := row.Scan(&name); err != nil {
+		t.Fatalf("goose version table not found: %v", err)
+	}
+
+	// 3) PRAGMA journal_mode should be WAL (best-effort; assert when not Windows)
+	var mode string
+	if err := db.QueryRow(`PRAGMA journal_mode;`).Scan(&mode); err == nil {
+		// Some drivers return lowercase/uppercase; normalize.
+		mode = strings.ToLower(mode)
+		if mode != "wal" {
+			// On Windows with certain filesystems, WAL can be disabled; do not fail hard there.
+			if runtime.GOOS != "windows" {
+				t.Fatalf("journal_mode = %q, want wal", mode)
+			}
+		}
+	}
+
+	// 4) PRAGMA busy_timeout: this setting is connection-local in many drivers.
+	// Since we are opening a fresh handle here, it may return driver defaults (often 0).
+	// Query it to ensure the PRAGMA is supported, but do not assert the value strictly.
+	var timeout int
+	if err := db.QueryRow(`PRAGMA busy_timeout;`).Scan(&timeout); err != nil {
+		t.Fatalf("query busy_timeout failed: %v", err)
+	}
 }
