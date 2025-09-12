@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
@@ -31,6 +33,35 @@ type sqliteStore struct {
 	db *sql.DB
 }
 
+// isBusyError returns true if error indicates SQLITE_BUSY
+func isBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// modernc.org/sqlite surfaces busy as an error string containing SQLITE_BUSY
+	return strings.Contains(err.Error(), "SQLITE_BUSY") || strings.Contains(err.Error(), "database is locked")
+}
+
+// execWithRetry executes a statement with args, retrying on SQLITE_BUSY up to a small limit.
+func (s *sqliteStore) execWithRetry(query string, args ...any) (sql.Result, error) {
+	var (
+		res sql.Result
+		err error
+	)
+	for attempt := 0; attempt < 5; attempt++ {
+		res, err = s.db.Exec(query, args...)
+		if err == nil {
+			return res, nil
+		}
+		if !isBusyError(err) {
+			return nil, err
+		}
+		// backoff a bit and retry
+		time.Sleep(time.Duration(50*(attempt+1)) * time.Millisecond)
+	}
+	return nil, err
+}
+
 // NewSQLiteStore creates a new SQLite-based store with migrations
 func NewSQLiteStore(dbPath string) (Store, error) {
 	// Ensure directory exists
@@ -45,6 +76,11 @@ func NewSQLiteStore(dbPath string) (Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
+
+	// Improve concurrency/robustness: set busy timeout and WAL mode
+	// Ignore errors from pragmas; they are best-effort and platform/driver dependent
+	_, _ = db.Exec("PRAGMA busy_timeout = 2000")
+	_, _ = db.Exec("PRAGMA journal_mode = WAL")
 
 	// Set up goose with embedded migrations
 	InitMigrations()
@@ -66,7 +102,7 @@ func NewSQLiteStore(dbPath string) (Store, error) {
 }
 
 func (s *sqliteStore) Save(fileID string, strategy string, path string, offset int64) error {
-	_, err := s.db.Exec(
+	_, err := s.execWithRetry(
 		`INSERT INTO offsets (id, strategy, path, offset, updated_at) 
 		 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) 
 		 ON CONFLICT(id, strategy) DO UPDATE SET 
@@ -99,7 +135,7 @@ func (s *sqliteStore) Load(fileID string, strategy string) (int64, bool, error) 
 }
 
 func (s *sqliteStore) Delete(fileID string, strategy string) error {
-	_, err := s.db.Exec(
+	_, err := s.execWithRetry(
 		`DELETE FROM offsets WHERE id = ? AND strategy = ?`,
 		fileID, strategy)
 
