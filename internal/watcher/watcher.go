@@ -66,6 +66,50 @@ func NewWatcher(config Config, cb func(id, path string), removeCb func(id string
 	}, nil
 }
 
+// computeFileID computes the file fingerprint/id according to the watcher's strategy.
+// Returns ok=false for expected skip conditions (e.g., zero-size, too small, not enough separators).
+func (w *Watcher) computeFileID(p string, info fs.FileInfo) (string, bool) {
+	if info == nil {
+		return "", false
+	}
+	// Skip empty files to avoid premature detection
+	if info.Size() == 0 {
+		return "", false
+	}
+	var (
+		id  string
+		err error
+	)
+	switch w.FingerprintStrategy {
+	case FingerprintStrategyChecksum:
+		id, err = file_tracker.GetFileFingerprintFromPath(p, int64(w.FingerprintSize))
+		if file_tracker.IsFileSizeTooSmall(err) {
+			return "", false
+		} else if err != nil {
+			slog.Warn("failed to get file fingerprint", "path", p, "error", err)
+			return "", false
+		}
+	case FingerprintStrategyChecksumSeperator:
+		id, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeperator, w.FingerprintSize)
+		if file_tracker.IsNotEnoughSeparators(err) {
+			return "", false
+		} else if err != nil {
+			slog.Warn("failed to get file fingerprint (separator)", "path", p, "error", err)
+			return "", false
+		}
+	case FingerprintStrategyDeviceAndInode:
+		id, err = file_tracker.GetFileIDFromPath(p)
+		if err != nil {
+			slog.Warn("failed to get file inode", "path", p, "error", err)
+			return "", false
+		}
+	default:
+		// preserve previous behavior: return an error to stop walk on unexpected strategy
+		return "", errors.New("unsupported fingerprint strategy: "+w.FingerprintStrategy) == nil
+	}
+	return id, true
+}
+
 func (w *Watcher) Start() {
 	ticker := time.NewTicker(w.interval)
 
@@ -94,22 +138,7 @@ func (w *Watcher) scan() {
 	existingFiles := make(map[string]bool)
 
 	// Determine if there are specific include patterns (globs or exact files)
-	hasSpecific := false
-	for _, pattern := range w.include {
-		cp := filepath.Clean(pattern)
-		if hasMeta(cp) {
-			hasSpecific = true
-			break
-		}
-		if fi, err := os.Stat(cp); err != nil {
-			// Path does not exist: if no meta, treat as specific (likely a file name pattern)
-			hasSpecific = true
-			break
-		} else if !fi.IsDir() {
-			hasSpecific = true
-			break
-		}
-	}
+	hasSpecific := hasSpecificIncludes(w.include)
 
 	// Derive roots dynamically from includes each scan (no persistent roots field)
 	roots := deriveScanRoots(w.include)
@@ -120,105 +149,30 @@ func (w *Watcher) scan() {
 				slog.Warn("failed to walk", "path", p, "error", err)
 				return nil
 			}
-
 			if info != nil && info.IsDir() {
 				return nil
 			}
 
-			// Apply include/exclude filters
-			if len(w.include) > 0 {
-				matched := false
-				base := filepath.Base(p)
-				for _, pattern := range w.include {
-					cleanPat := filepath.Clean(pattern)
-					// Directory-like include (no glob)
-					if !hasMeta(cleanPat) {
-						if infoDir, err := os.Stat(cleanPat); (err == nil && infoDir.IsDir()) || strings.HasSuffix(pattern, string(filepath.Separator)) {
-							// If we also have specific includes (globs or exact files), ignore broad directory includes as filters
-							if !hasSpecific {
-								if isSubPath(p, strings.TrimSuffix(cleanPat, string(filepath.Separator))) {
-									matched = true
-									break
-								}
-							}
-						} else {
-							// Treat as exact file path match (support relative/absolute by cleaning both)
-							if filepath.Clean(p) == cleanPat || filepath.Base(p) == cleanPat {
-								matched = true
-								break
-							}
-						}
-						continue
-					}
-					// Glob patterns: match against base and full path
-					if ok, _ := filepath.Match(cleanPat, base); ok {
-						matched = true
-						break
-					}
-					if ok, _ := filepath.Match(cleanPat, p); ok {
-						matched = true
-						break
-					}
-				}
-				if !matched {
-					return nil
-				}
+			// Filters: include first, then exclude
+			if len(w.include) > 0 && !pathIncluded(p, w.include, hasSpecific) {
+				return nil
 			}
-
-			if len(w.exclude) > 0 {
-				base := filepath.Base(p)
-				for _, pattern := range w.exclude {
-					if ok, _ := filepath.Match(pattern, base); ok {
-						return nil
-					}
-					if ok, _ := filepath.Match(pattern, p); ok {
-						return nil
-					}
-				}
-			}
-
-			// Skip processing if the file size is 0 to prevent detecting files
-			// before they are fully created/written
-			if info.Size() == 0 {
+			if len(w.exclude) > 0 && pathExcluded(p, w.exclude) {
 				return nil
 			}
 
-			var fileId string
-			switch w.FingerprintStrategy {
-			case FingerprintStrategyChecksum:
-				fileId, err = file_tracker.GetFileFingerprintFromPath(p, int64(w.FingerprintSize))
-				if file_tracker.IsFileSizeTooSmall(err) {
-					return nil
-				} else if err != nil {
-					slog.Warn("failed to get file fingerprint", "path", p, "error", err)
-					return nil
-				}
-			case FingerprintStrategyChecksumSeperator:
-				fileId, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeperator, w.FingerprintSize)
-				if file_tracker.IsNotEnoughSeparators(err) {
-					return nil
-				} else if err != nil {
-					slog.Warn("failed to get file fingerprint (separator)", "path", p, "error", err)
-					return nil
-				}
-			case FingerprintStrategyDeviceAndInode:
-				fileId, err = file_tracker.GetFileIDFromPath(p)
-				if err != nil {
-					slog.Warn("failed to get file inode", "path", p, "error", err)
-					return nil
-				}
-			default:
-				return errors.New("unsupported fingerprint strategy: " + w.FingerprintStrategy)
+			// Compute file ID according to strategy (with size/condition checks)
+			fileId, ok := w.computeFileID(p, info)
+			if !ok {
+				return nil
 			}
 
 			existingFiles[fileId] = true
 
-			manager := w.fileManager.Get(fileId)
-			if manager == nil {
+			if w.fileManager.Get(fileId) == nil {
 				w.fileManager.Add(fileId, p, w.FingerprintStrategy, int64(w.FingerprintSize), 0)
 				w.callback(fileId, p)
 			}
-
 			return nil
 		})
 		if err != nil {
@@ -235,4 +189,70 @@ func (w *Watcher) scan() {
 			w.fileManager.Remove(fileId)
 		}
 	}
+}
+
+// hasSpecificIncludes returns true if includes contain any glob, non-existent path,
+// or an explicit file (non-directory). This affects how broad directory includes are treated.
+func hasSpecificIncludes(includes []string) bool {
+	for _, pattern := range includes {
+		cp := filepath.Clean(pattern)
+		if hasMeta(cp) {
+			return true
+		}
+		if fi, err := os.Stat(cp); err != nil {
+			// Path does not exist: if no meta, treat as specific (likely a file name pattern)
+			return true
+		} else if !fi.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// pathIncluded checks whether path p should be included according to include patterns.
+// When hasSpecific is true (globs or explicit files present), broad directory includes are ignored as filters.
+func pathIncluded(p string, includes []string, hasSpecific bool) bool {
+	base := filepath.Base(p)
+	for _, pattern := range includes {
+		cleanPat := filepath.Clean(pattern)
+		// Directory-like include (no glob)
+		if !hasMeta(cleanPat) {
+			if infoDir, err := os.Stat(cleanPat); (err == nil && infoDir.IsDir()) || strings.HasSuffix(pattern, string(filepath.Separator)) {
+				// If we also have specific includes (globs or exact files), ignore broad directory includes as filters
+				if !hasSpecific {
+					if isSubPath(p, strings.TrimSuffix(cleanPat, string(filepath.Separator))) {
+						return true
+					}
+				}
+			} else {
+				// Treat as exact file path match (support relative/absolute by cleaning both)
+				if filepath.Clean(p) == cleanPat || filepath.Base(p) == cleanPat {
+					return true
+				}
+			}
+			continue
+		}
+		// Glob patterns: match against base and full path
+		if ok, _ := filepath.Match(cleanPat, base); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(cleanPat, p); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// pathExcluded checks whether path p matches any exclude pattern.
+func pathExcluded(p string, excludes []string) bool {
+	base := filepath.Base(p)
+	for _, pattern := range excludes {
+		if ok, _ := filepath.Match(pattern, base); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(pattern, p); ok {
+			return true
+		}
+	}
+	return false
 }
