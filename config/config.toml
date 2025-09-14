@@ -84,6 +84,19 @@ index = "logs-freader"
 user = ""
 password = ""
 
+# Parser configuration (optional)
+# If enabled, freader will parse lines and emit transformed output to sinks.
+# Currently supported:
+#   [parser]
+#   type   = "auditd"         # parse Linux auditd text logs
+#   format = "json"            # "json" for compact JSON, or "raw" to pass-through
+#   drop-non-matching = false   # if true, lines not recognized as audit logs are dropped
+
+[parser]
+# type = "auditd"
+# format = "json"
+# drop-non-matching = false
+
 # Prometheus metrics endpoint
 [prometheus]
 enable = false

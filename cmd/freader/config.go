@@ -32,6 +32,12 @@ type SinkConfig struct {
 
 // Config holds all configuration options for the freader application
 // It now uses a nested Collector config for the reader options.
+type ParserConfig struct {
+	Type            string `mapstructure:"type"`              // "" or "auditd"
+	Format          string `mapstructure:"format"`            // "raw" or "json"
+	DropNonMatching bool   `mapstructure:"drop-non-matching"` // if true, drop lines that don't match parser
+}
+
 type Config struct {
 	// Optional config file path (flag/env only)
 	ConfigFile string
@@ -39,6 +45,8 @@ type Config struct {
 	Collector freader.Config `mapstructure:"collector"`
 	// Forwarding sink (nested and unified output)
 	Sink SinkConfig `mapstructure:"sink"`
+	// Parser options (top-level)
+	Parser ParserConfig `mapstructure:"parser"`
 	// Metrics/Prometheus options
 	Prometheus metrics.Config `mapstructure:"prometheus"`
 }
