@@ -10,6 +10,7 @@ import (
 
 	"github.com/loykin/freader"
 	cmdmetrics "github.com/loykin/freader/cmd/freader/metrics"
+	"github.com/loykin/freader/pkg/parser/audit"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/cobra"
 )
@@ -93,15 +94,44 @@ func runCollector(config *Config) error {
 
 	// Prepare collector configuration from nested config
 	cfg := config.Collector
+
+	// Optional parser transform
+	transform := func(s string) (string, bool) { return s, true }
+	if config.Parser.Type == "auditd" {
+		format := config.Parser.Format
+		if format == "" {
+			format = "json"
+		}
+		drop := config.Parser.DropNonMatching
+		transform = func(s string) (string, bool) {
+			rec, ok, _ := audit.Parse(s)
+			if !ok {
+				if drop {
+					return "", false
+				}
+				return s, true
+			}
+			if format == "json" || format == "json-compact" {
+				return rec.JSON(), true
+			}
+			// raw falls back to original line
+			return s, true
+		}
+	}
+
 	cfg.OnLineFunc = func(line string) {
+		out, ok := transform(line)
+		if !ok {
+			return
+		}
 		if sink != nil {
 			// When a sink is configured (stdout/opensearch/clickhouse), it is the single output path.
 			// Do not duplicate to local output.
-			sink.Enqueue(line)
+			sink.Enqueue(out)
 			return
 		}
 		// No sink configured: fallback print to stdout
-		fmt.Println(line)
+		fmt.Println(out)
 	}
 
 	// Create collector

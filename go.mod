@@ -2,9 +2,10 @@ module github.com/loykin/freader
 
 go 1.24.0
 
-require (
+	require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/elastic/go-libaudit/v2 v2.6.2
 	github.com/opensearch-project/opensearch-go v1.1.0
 	github.com/pressly/goose/v3 v3.25.0
 	github.com/prometheus/client_golang v1.23.2
