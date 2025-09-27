@@ -1,0 +1,233 @@
+name: Fuzz Tests
+
+on:
+  # Run on schedule (daily at 2 AM UTC)
+  schedule:
+    - cron: '0 2 * * *'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Test duration (e.g., 1h, 30m, 2h)'
+        required: false
+        default: '1h'
+      tests:
+        description: 'Specific test pattern to run'
+        required: false
+        default: 'TestCollector_LongRunning'
+
+env:
+  GO_VERSION: '1.25'
+  FREADER_FUZZ_TEST: '1'
+
+jobs:
+  fuzz-stability:
+    name: Fuzz Tests - Multi-file Operations
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 hours max
+
+    strategy:
+      matrix:
+        test_type:
+          - name: "Continuous Load - Multi-file Read/Write"
+            pattern: "TestCollector_Fuzz/ContinuousLoad"
+            duration: "1h"
+          - name: "Memory Stability - Varying File Patterns"
+            pattern: "TestCollector_Fuzz/MemoryStability"
+            duration: "1h"
+          - name: "Chaos Engineering - File Creation/Deletion/Rotation"
+            pattern: "TestCollector_Fuzz/ChaosEngineering"
+            duration: "45m"
+          - name: "Goroutine Leak Detection - Resource Management"
+            pattern: "TestCollector_Fuzz/GoroutineLeakDetection"
+            duration: "30m"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Set test duration
+      run: |
+        DURATION="${{ github.event.inputs.duration || matrix.test_type.duration }}"
+        echo "TEST_DURATION=$DURATION" >> $GITHUB_ENV
+
+    - name: Run fuzz test
+      env:
+        FREADER_FUZZ_TEST: "1"
+        FREADER_FUZZ_DURATION: ${{ env.TEST_DURATION }}
+      run: |
+        echo "Running ${{ matrix.test_type.name }} for ${{ env.TEST_DURATION }}"
+        go test -v -timeout=3h -run="${{ matrix.test_type.pattern }}" ./internal/collector
+
+    - name: Upload test artifacts on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-failure-${{ matrix.test_type.name }}-${{ github.run_number }}
+        path: |
+          /tmp/freader-test-*
+          *.log
+        retention-days: 7
+
+  weekend-marathon:
+    name: Weekend Marathon Fuzz Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 720  # 12 hours
+    # Only run on Saturday
+    if: github.event.schedule == '0 2 * * 6' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run marathon fuzz test
+      env:
+        FREADER_FUZZ_TEST: "1"
+        FREADER_FUZZ_DURATION: "8h"
+      run: |
+        echo "Starting 8-hour marathon fuzz test"
+        go test -v -timeout=10h -run="TestCollector_Fuzz" ./internal/collector
+
+  performance-regression:
+    name: Performance Regression Detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run benchmark comparison
+      run: |
+        # Run benchmarks multiple times for stability
+        echo "Running performance benchmarks..."
+        go test -bench=. -benchmem -count=5 -timeout=30m ./internal/collector > current_bench.txt
+
+        # Store results for comparison
+        cat current_bench.txt
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results-${{ github.run_number }}
+        path: current_bench.txt
+
+  fuzz-stress-matrix:
+    name: Fuzz Stress Test Matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    strategy:
+      matrix:
+        scenario:
+          - name: "High File Count Fuzz"
+            files: 1000
+            workers: 8
+            duration: "30m"
+          - name: "Large Files Fuzz"
+            files: 10
+            workers: 4
+            duration: "30m"
+            file_size: "100MB"
+          - name: "Rapid Rotation Fuzz"
+            files: 50
+            workers: 6
+            duration: "30m"
+            rotation_interval: "30s"
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Run fuzz stress test
+      env:
+        FREADER_FUZZ_TEST: "1"
+        FREADER_STRESS_SCENARIO: ${{ matrix.scenario.name }}
+        FREADER_STRESS_FILES: ${{ matrix.scenario.files }}
+        FREADER_STRESS_WORKERS: ${{ matrix.scenario.workers }}
+        FREADER_FUZZ_DURATION: ${{ matrix.scenario.duration }}
+      run: |
+        echo "Running fuzz stress test: ${{ matrix.scenario.name }}"
+        go test -v -timeout=2h -run="TestCollector_Fuzz" ./internal/collector
+
+  notify-results:
+    name: Notify Fuzz Test Results
+    needs: [fuzz-stability, performance-regression, fuzz-stress-matrix]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Prepare notification
+      run: |
+        if [[ "${{ needs.fuzz-stability.result }}" == "success" && \
+              "${{ needs.performance-regression.result }}" == "success" && \
+              "${{ needs.fuzz-stress-matrix.result }}" == "success" ]]; then
+          echo "STATUS=✅ All fuzz tests passed" >> $GITHUB_ENV
+        else
+          echo "STATUS=❌ Some fuzz tests failed" >> $GITHUB_ENV
+        fi
+
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Fuzz test failure - ${new Date().toISOString().split('T')[0]}`,
+            body: `
+            ## Fuzz Test Failure Report
+
+            **Run ID**: ${{ github.run_id }}
+            **Commit**: ${{ github.sha }}
+            **Branch**: ${{ github.ref_name }}
+
+            ### Failed Jobs:
+            - Fuzz Stability Tests: ${{ needs.fuzz-stability.result }}
+            - Performance Regression: ${{ needs.performance-regression.result }}
+            - Fuzz Stress Matrix: ${{ needs.fuzz-stress-matrix.result }}
+
+            ### Action Required:
+            - [ ] Investigate data loss in multi-file operations
+            - [ ] Check file rotation handling
+            - [ ] Verify file creation/deletion resilience
+            - [ ] Review memory leaks and goroutine leaks
+            - [ ] Analyze performance regressions
+
+            [View full run details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `,
+            labels: ['bug', 'fuzz-test-failure', 'priority-high']
+          })
