@@ -84,8 +84,6 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
-          vuln-type: go
-          scanners: vuln
           format: json
           output: trivy-report.json
 
