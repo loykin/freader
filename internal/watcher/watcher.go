@@ -25,6 +25,7 @@ type Watcher struct {
 	callback             func(id, path string)
 	removeCallback       func(id string)
 	stopCh               chan struct{}
+	doneCh               chan struct{} // Signal when goroutine has finished
 	fileManager          *file_tracker.FileTracker
 	exclude              []string
 	include              []string
@@ -60,6 +61,7 @@ func NewWatcher(config Config, cb func(id, path string), removeCb func(id string
 		FingerprintSeparator: config.FingerprintSeparator,
 		removeCallback:       removeCb,
 		stopCh:               make(chan struct{}),
+		doneCh:               make(chan struct{}),
 		fileManager:          config.FileTracker,
 		exclude:              config.Exclude,
 		include:              config.Include,
@@ -115,7 +117,10 @@ func (w *Watcher) Start() {
 	ticker := time.NewTicker(w.interval)
 
 	go func() {
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+			close(w.doneCh) // Signal that goroutine has finished
+		}()
 
 		// Perform an immediate scan on start
 		w.scan()
@@ -132,7 +137,18 @@ func (w *Watcher) Start() {
 }
 
 func (w *Watcher) Stop() {
-	close(w.stopCh)
+	select {
+	case <-w.stopCh:
+		return // Already stopped
+	default:
+		close(w.stopCh)
+	}
+}
+
+// StopAndWait stops the watcher and waits for the goroutine to finish
+func (w *Watcher) StopAndWait() {
+	w.Stop()
+	<-w.doneCh // Wait for goroutine to finish
 }
 
 func (w *Watcher) scan() {
