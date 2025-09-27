@@ -14,6 +14,14 @@ import (
 	"github.com/loykin/freader/internal/watcher"
 )
 
+// bufferPool is a global pool for reusing byte slices to reduce memory allocations
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		// Start with a reasonable buffer size (4KB)
+		return make([]byte, 0, 4096)
+	},
+}
+
 type TailReader struct {
 	FileId    string
 	Offset    int64
@@ -87,6 +95,12 @@ func (t *TailReader) open() error {
 	t.file = file
 	t.reader = bufio.NewReader(t.file)
 
+	// Initialize buffer from pool if not already set
+	if t.buf == nil {
+		t.buf = bufferPool.Get().([]byte)
+		t.buf = t.buf[:0] // reset length but keep capacity
+	}
+
 	return nil
 }
 
@@ -101,8 +115,13 @@ func (t *TailReader) readNextChunk() ([]byte, error) {
 		if idx := bytes.Index(t.buf, sep); idx >= 0 {
 			end := idx + len(sep)
 			chunk := t.buf[:end]
-			// advance buffer
-			t.buf = append([]byte{}, t.buf[end:]...)
+			// advance buffer efficiently using copy instead of allocating new slice
+			if end < len(t.buf) {
+				copy(t.buf, t.buf[end:])
+				t.buf = t.buf[:len(t.buf)-end]
+			} else {
+				t.buf = t.buf[:0] // reset buffer if we consumed everything
+			}
 			return chunk, nil
 		}
 		// Read more data
@@ -292,7 +311,14 @@ func (t *TailReader) cleanup() {
 		t.file = nil
 	}
 	t.reader = nil
-	t.buf = nil
+
+	// Return buffer to pool for reuse instead of setting to nil
+	if t.buf != nil {
+		// Reset the buffer length but keep capacity for reuse
+		t.buf = t.buf[:0]
+		bufferPool.Put(t.buf)
+		t.buf = nil
+	}
 }
 
 func (t *TailReader) Close() {
