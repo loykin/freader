@@ -192,6 +192,7 @@ jobs:
 
     steps:
     - name: Prepare notification
+      shell: bash
       run: |
         if [[ "${{ needs.fuzz-stability.result }}" == "success" && \
               "${{ needs.performance-regression.result }}" == "success" && \

@@ -40,6 +40,7 @@ jobs:
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Staticcheck (exclude examples)
+        shell: bash
         run: |
           set -euo pipefail
           PKGS=$(go list ./... | grep -v /examples)
@@ -102,6 +103,7 @@ jobs:
         run: go build -trimpath -ldflags "-s -w" -o /tmp/freader ./cmd/freader
 
       - name: Run tests (exclude examples)
+        shell: bash
         run: |
           set -euo pipefail
           PKGS=$(go list ./... | grep -v /examples)
