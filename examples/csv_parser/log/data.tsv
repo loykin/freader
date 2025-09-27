@@ -1,0 +1,7 @@
+category	name	value	active
+performance	cpu_usage	85.5	true
+performance	memory_usage	67.2	true
+network	bandwidth	156.8	false
+storage	disk_usage	156.7	true
+security	failed_logins	12.0	true
+performance	response_time	234.5	false
