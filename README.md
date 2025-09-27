@@ -12,7 +12,7 @@ Features:
 - Simple standalone binary (`cmd/freader`)
 - Multi-platform (Linux, macOS, Windows; amd64/arm64)
 - Multi-byte/string record separators ("\n", "\r\n", or tokens like "<END>")
-- Flexible fingerprint strategies: deviceAndInode, checksum, and checksumSeperator (hash until Nth separator)
+- Flexible fingerprint strategies: deviceAndInode, checksum, and checksumSeparator (hash until Nth separator)
 - Multiple sinks: console, file, ClickHouse, OpenSearch (with per-sink validation)
 - Prometheus metrics support
 
@@ -81,8 +81,8 @@ exclude = ["*.tmp"]
 # Reader options
 poll-interval = "2s"
 separator = "\n"                  # supports multi-byte like "\r\n" or tokens like "<END>"
-fingerprint-strategy = "checksum"   # or "deviceAndInode" or "checksumSeperator"
-fingerprint-size = 64                # for checksum; for checksumSeperator it means N separators
+fingerprint-strategy = "checksum"   # or "deviceAndInode" or "checksumSeparator"
+fingerprint-size = 64                # for checksum; for checksumSeparator it means N separators
 
 [sink]
 # Forwarding/output sink (optional)
@@ -94,13 +94,13 @@ labels = { env = "dev", app = "freader" }
 ```
 
 Validation:
-- Strategy-specific checks are enforced (e.g., checksum requires fingerprint-size > 0; checksumSeperator requires non-empty collector.separator).
+- Strategy-specific checks are enforced (e.g., checksum requires fingerprint-size > 0; checksumSeparator requires non-empty collector.separator).
 - Each sink has its own validation (e.g., file.path must be set when sink.type="file").
 
 Environment variables are also supported (uppercase; nested keys use `__`). Examples:
 - `FREADER_COLLECTOR__INCLUDE="./log,./log/*.log"`
 - `FREADER_COLLECTOR__SEPARATOR="<END>"`
-- `FREADER_COLLECTOR__FINGERPRINT_STRATEGY=checksumSeperator`
+- `FREADER_COLLECTOR__FINGERPRINT_STRATEGY=checksumSeparator`
 - `FREADER_COLLECTOR__FINGERPRINT_SIZE=2`
 - `FREADER_PROMETHEUS__ENABLE=true`
 - `FREADER_SINK__TYPE=clickhouse`
@@ -219,7 +219,7 @@ See examples/ for:
 - `examples/log_reader` — use TailReader only
 - `examples/lumberjack_rotation` — log rotation behavior (device+inode and checksum)
 - `examples/checksum_reader` — simple checksum strategy reader with bundled sample logs
-- `examples/checksum_seperator` — checksumSeperator strategy with a custom token separator and bundled sample logs
+- `examples/checksum_separator` — checksumSeparator strategy with a custom token separator and bundled sample logs
 
 ## Notes & Tips
 - Default sink: console (stdout)
@@ -263,7 +263,7 @@ This project aims for clear, predictable offset behavior. Offsets are measured i
     - Ensure writers always terminate records with separators to avoid timeout-based grouping.
 
 - Rotation and fingerprints (brief)
-  - The collector uses strategies like device+inode, checksum, or checksumSeperator to detect files robustly across rotations. Offsets are tied to the identified file, not only the path. Ensure the strategy fits your environment.
+  - The collector uses strategies like device+inode, checksum, or checksumSeparator to detect files robustly across rotations. Offsets are tied to the identified file, not only the path. Ensure the strategy fits your environment.
 
 Practical tips
 - Prefer always-terminated lines (writers always end records with the configured separator). This keeps offsets perfectly aligned with file bytes and simplifies restarts.

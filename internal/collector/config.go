@@ -59,8 +59,8 @@ func (c *Config) Validate() error {
 		Include:             c.Include,
 		Exclude:             c.Exclude,
 		FileTracker:         nil, // set at runtime by NewCollector
-		// For checksumSeperator strategy, watcher expects FingerprintSeperator to be the record separator
-		FingerprintSeperator: c.Separator,
+		// For checksumSeparator strategy, watcher expects FingerprintSeparator to be the record separator
+		FingerprintSeparator: c.Separator,
 	}
 	return wc.Validate()
 }

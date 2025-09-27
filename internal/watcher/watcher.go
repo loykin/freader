@@ -13,14 +13,14 @@ import (
 )
 
 const FingerprintStrategyChecksum = "checksum"
-const FingerprintStrategyChecksumSeperator = "checksumSeperator"
+const FingerprintStrategyChecksumSeparator = "checksumSeparator"
 const FingerprintStrategyDeviceAndInode = "deviceAndInode"
 const DefaultFingerprintStrategySize = 1024
 
 type Watcher struct {
 	FingerprintStrategy  string
 	FingerprintSize      int
-	FingerprintSeperator string
+	FingerprintSeparator string
 	interval             time.Duration
 	callback             func(id, path string)
 	removeCallback       func(id string)
@@ -57,7 +57,7 @@ func NewWatcher(config Config, cb func(id, path string), removeCb func(id string
 		callback:             cb,
 		FingerprintStrategy:  config.FingerprintStrategy,
 		FingerprintSize:      config.FingerprintSize,
-		FingerprintSeperator: config.FingerprintSeperator,
+		FingerprintSeparator: config.FingerprintSeparator,
 		removeCallback:       removeCb,
 		stopCh:               make(chan struct{}),
 		fileManager:          config.FileTracker,
@@ -89,8 +89,8 @@ func (w *Watcher) computeFileID(p string, info fs.FileInfo) (string, bool) {
 			slog.Warn("failed to get file fingerprint", "path", p, "error", err)
 			return "", false
 		}
-	case FingerprintStrategyChecksumSeperator:
-		id, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeperator, w.FingerprintSize)
+	case FingerprintStrategyChecksumSeparator:
+		id, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeparator, w.FingerprintSize)
 		if file_tracker.IsNotEnoughSeparators(err) {
 			return "", false
 		} else if err != nil {
@@ -105,7 +105,8 @@ func (w *Watcher) computeFileID(p string, info fs.FileInfo) (string, bool) {
 		}
 	default:
 		// preserve previous behavior: return an error to stop walk on unexpected strategy
-		return "", errors.New("unsupported fingerprint strategy: "+w.FingerprintStrategy) == nil
+		slog.Error("unsupported fingerprint strategy", "strategy", w.FingerprintStrategy)
+		return "", false
 	}
 	return id, true
 }

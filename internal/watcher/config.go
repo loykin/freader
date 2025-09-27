@@ -11,7 +11,7 @@ type Config struct {
 	PollInterval         time.Duration
 	FingerprintStrategy  string
 	FingerprintSize      int
-	FingerprintSeperator string
+	FingerprintSeparator string
 	Exclude              []string
 	Include              []string
 	FileTracker          *file_tracker.FileTracker
@@ -28,12 +28,12 @@ func (c Config) Validate() error {
 			return errors.New("fingerprint size must be greater than 0")
 		}
 		return nil
-	case FingerprintStrategyChecksumSeperator:
+	case FingerprintStrategyChecksumSeparator:
 		if c.FingerprintSize <= 0 {
 			return errors.New("fingerprint size must be greater than 0")
 		}
-		if c.FingerprintSeperator == "" {
-			return errors.New("fingerprint separator must be set for checksumSeperator strategy")
+		if c.FingerprintSeparator == "" {
+			return errors.New("fingerprint separator must be set for checksumSeparator strategy")
 		}
 		return nil
 	default:

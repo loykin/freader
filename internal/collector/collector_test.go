@@ -1020,11 +1020,11 @@ func TestCollector_Checksum_SeparatorVariants_WindowsFriendly(t *testing.T) {
 	})
 }
 
-func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
+func TestCollector_ChecksumSeparator_VariantsAndRestart(t *testing.T) {
 	base := t.TempDir()
 
 	// CRLF variant (Windows-friendly)
-	t.Run("CRLF checksumSeperator", func(t *testing.T) {
+	t.Run("CRLF checksumSeparator", func(t *testing.T) {
 		p := filepath.Join(base, "crlf_sep.log")
 		assert.NoError(t, os.WriteFile(p, []byte("a\r\nb\r\n"), 0644))
 
@@ -1035,7 +1035,7 @@ func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
 			PollInterval:        50 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           "\r\n",
-			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeperator,
+			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeparator,
 			FingerprintSize:     2, // N separators to include in fingerprint
 			OnLineFunc: func(s string) {
 				mu.Lock()
@@ -1092,7 +1092,7 @@ func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
 	})
 
 	// Restart with partial using custom token <END>
-	t.Run("ChecksumSeperator restart no-loss", func(t *testing.T) {
+	t.Run("ChecksumSeparator restart no-loss", func(t *testing.T) {
 		p := filepath.Join(base, "token_sep.log")
 		initial := "a<END>b<END>c"
 		assert.NoError(t, os.WriteFile(p, []byte(initial), 0644))
@@ -1105,7 +1105,7 @@ func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
 			PollInterval:        50 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           "<END>",
-			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeperator,
+			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeparator,
 			FingerprintSize:     2, // need two separators to fingerprint
 			OnLineFunc: func(s string) {
 				mu1.Lock()
@@ -1149,7 +1149,7 @@ func TestCollector_ChecksumSeperator_VariantsAndRestart(t *testing.T) {
 			PollInterval:        50 * time.Millisecond,
 			WorkerCount:         1,
 			Separator:           "<END>",
-			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeperator,
+			FingerprintStrategy: watcher.FingerprintStrategyChecksumSeparator,
 			FingerprintSize:     2,
 			OnLineFunc: func(s string) {
 				mu2.Lock()
