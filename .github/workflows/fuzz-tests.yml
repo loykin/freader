@@ -1,4 +1,6 @@
 name: Fuzz Tests
+permissions:
+  contents: read
 
 on:
   # Run on schedule (daily at 2 AM UTC)
