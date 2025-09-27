@@ -167,7 +167,7 @@ func (c *Config) SetupFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVarP(&c.Collector.Exclude, "exclude", "E", c.Collector.Exclude, "Exclude patterns (e.g., *.tmp, *.log)")
 	cmd.Flags().DurationVarP(&c.Collector.PollInterval, "poll-interval", "i", c.Collector.PollInterval, "Interval to poll for file changes")
 	cmd.Flags().StringVar(&c.Collector.Separator, "separator", c.Collector.Separator, "Record separator (string, supports multi-byte like \\\"\\r\\n\\\" or tokens like <END>)")
-	cmd.Flags().IntVarP(&c.Collector.FingerprintSize, "fingerprint-size", "s", c.Collector.FingerprintSize, "Size of fingerprint for checksum strategy (or N separators for checksumSeperator)")
+	cmd.Flags().IntVarP(&c.Collector.FingerprintSize, "fingerprint-size", "s", c.Collector.FingerprintSize, "Size of fingerprint for checksum strategy (or N separators for checksumSeparator)")
 	cmd.Flags().StringVarP(&c.Collector.FingerprintStrategy, "fingerprint-strategy", "f", c.Collector.FingerprintStrategy,
 		fmt.Sprintf("Fingerprint strategy (%s or %s)",
 			freader.FingerprintStrategyChecksum,

@@ -43,7 +43,7 @@ type MultilineReader = tailer.MultilineReader
 // Fingerprint strategy constants re-exported for convenient configuration.
 const (
 	FingerprintStrategyChecksum          = watcher.FingerprintStrategyChecksum
-	FingerprintStrategyChecksumSeperator = watcher.FingerprintStrategyChecksumSeperator
+	FingerprintStrategyChecksumSeparator = watcher.FingerprintStrategyChecksumSeparator
 	FingerprintStrategyDeviceAndInode    = watcher.FingerprintStrategyDeviceAndInode
 
 	MultilineReaderModeContinuePast    = tailer.MultilineReaderModeContinuePast

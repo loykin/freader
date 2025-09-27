@@ -13,18 +13,19 @@ import (
 )
 
 const FingerprintStrategyChecksum = "checksum"
-const FingerprintStrategyChecksumSeperator = "checksumSeperator"
+const FingerprintStrategyChecksumSeparator = "checksumSeparator"
 const FingerprintStrategyDeviceAndInode = "deviceAndInode"
 const DefaultFingerprintStrategySize = 1024
 
 type Watcher struct {
 	FingerprintStrategy  string
 	FingerprintSize      int
-	FingerprintSeperator string
+	FingerprintSeparator string
 	interval             time.Duration
 	callback             func(id, path string)
 	removeCallback       func(id string)
 	stopCh               chan struct{}
+	doneCh               chan struct{} // Signal when goroutine has finished
 	fileManager          *file_tracker.FileTracker
 	exclude              []string
 	include              []string
@@ -57,9 +58,10 @@ func NewWatcher(config Config, cb func(id, path string), removeCb func(id string
 		callback:             cb,
 		FingerprintStrategy:  config.FingerprintStrategy,
 		FingerprintSize:      config.FingerprintSize,
-		FingerprintSeperator: config.FingerprintSeperator,
+		FingerprintSeparator: config.FingerprintSeparator,
 		removeCallback:       removeCb,
 		stopCh:               make(chan struct{}),
+		doneCh:               make(chan struct{}),
 		fileManager:          config.FileTracker,
 		exclude:              config.Exclude,
 		include:              config.Include,
@@ -89,8 +91,8 @@ func (w *Watcher) computeFileID(p string, info fs.FileInfo) (string, bool) {
 			slog.Warn("failed to get file fingerprint", "path", p, "error", err)
 			return "", false
 		}
-	case FingerprintStrategyChecksumSeperator:
-		id, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeperator, w.FingerprintSize)
+	case FingerprintStrategyChecksumSeparator:
+		id, err = file_tracker.GetFileFingerprintUntilNSeparatorsFromPath(p, w.FingerprintSeparator, w.FingerprintSize)
 		if file_tracker.IsNotEnoughSeparators(err) {
 			return "", false
 		} else if err != nil {
@@ -105,7 +107,8 @@ func (w *Watcher) computeFileID(p string, info fs.FileInfo) (string, bool) {
 		}
 	default:
 		// preserve previous behavior: return an error to stop walk on unexpected strategy
-		return "", errors.New("unsupported fingerprint strategy: "+w.FingerprintStrategy) == nil
+		slog.Error("unsupported fingerprint strategy", "strategy", w.FingerprintStrategy)
+		return "", false
 	}
 	return id, true
 }
@@ -114,7 +117,10 @@ func (w *Watcher) Start() {
 	ticker := time.NewTicker(w.interval)
 
 	go func() {
-		defer ticker.Stop()
+		defer func() {
+			ticker.Stop()
+			close(w.doneCh) // Signal that goroutine has finished
+		}()
 
 		// Perform an immediate scan on start
 		w.scan()
@@ -131,7 +137,18 @@ func (w *Watcher) Start() {
 }
 
 func (w *Watcher) Stop() {
-	close(w.stopCh)
+	select {
+	case <-w.stopCh:
+		return // Already stopped
+	default:
+		close(w.stopCh)
+	}
+}
+
+// StopAndWait stops the watcher and waits for the goroutine to finish
+func (w *Watcher) StopAndWait() {
+	w.Stop()
+	<-w.doneCh // Wait for goroutine to finish
 }
 
 func (w *Watcher) scan() {

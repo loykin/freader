@@ -23,7 +23,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
 	// Path to bundled sample tokens (relative to repo root when running the example)
-	include := []string{"./examples/checksum_seperator/log/*.log"} //nolint:misspell // repo dir name uses this spelling
+	include := []string{"./examples/checksum_separator/log/*.log"} //nolint:misspell // repo dir name uses this spelling
 
 	// Configure the collector for Nth-separator checksum tracking
 	var cfg freader.Config
@@ -32,7 +32,7 @@ func main() {
 	cfg.Separator = "<END>" // use custom token separator
 	cfg.WorkerCount = 1
 	cfg.PollInterval = 100 * time.Millisecond
-	cfg.FingerprintStrategy = freader.FingerprintStrategyChecksumSeperator
+	cfg.FingerprintStrategy = freader.FingerprintStrategyChecksumSeparator
 	cfg.FingerprintSize = 2  // compute fingerprint until 2nd occurrence of <END>
 	cfg.StoreOffsets = false // not needed for a short demo
 
@@ -55,7 +55,7 @@ func main() {
 
 	// Append a couple of records to the bundled sample to show live updates.
 	func() {
-		path := "./examples/checksum_seperator/log/sample.log" //nolint:misspell // repo dir name uses this spelling
+		path := "./examples/checksum_separator/log/sample.log" //nolint:misspell // repo dir name uses this spelling
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			slog.Warn("could not open bundled sample for append (skipping live demo)", "error", err)

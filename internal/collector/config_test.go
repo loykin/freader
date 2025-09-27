@@ -63,20 +63,20 @@ func TestConfigValidate_Checksum_RequiresPositiveSize(t *testing.T) {
 	}
 }
 
-func TestConfigValidate_ChecksumSeperator_RequiresSizeAndSeparator(t *testing.T) {
+func TestConfigValidate_ChecksumSeparator_RequiresSizeAndSeparator(t *testing.T) {
 	c := Config{}
 	c.Default()
-	c.FingerprintStrategy = watcher.FingerprintStrategyChecksumSeperator
+	c.FingerprintStrategy = watcher.FingerprintStrategyChecksumSeparator
 	c.Separator = ""      // missing
 	c.FingerprintSize = 0 // invalid size
 	if err := c.Validate(); err == nil {
-		t.Fatal("Validate() should error when checksumSeperator missing size and separator")
+		t.Fatal("Validate() should error when checksumSeparator missing size and separator")
 	}
 
 	// Fix size but keep missing separator
 	c.FingerprintSize = 8
 	if err := c.Validate(); err == nil {
-		t.Fatal("Validate() should error when checksumSeperator is missing separator")
+		t.Fatal("Validate() should error when checksumSeparator is missing separator")
 	}
 
 	// Fix separator as well

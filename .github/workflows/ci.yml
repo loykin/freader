@@ -19,6 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,11 +30,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # -----------------------
+      # Static analysis
+      # -----------------------
       - name: Vet
         run: go vet ./...
 
       - name: Install staticcheck
-        shell: bash
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Staticcheck (exclude examples)
@@ -41,44 +44,61 @@ jobs:
         run: |
           set -euo pipefail
           PKGS=$(go list ./... | grep -v /examples)
-          if [ -z "$PKGS" ]; then
-            echo "No packages to check"
-            exit 0
-          fi
-          staticcheck $PKGS
+          [ -n "$PKGS" ] && staticcheck $PKGS || echo "No packages to check"
 
+      # -----------------------
+      # Security scans (Ubuntu only, push only)
+      # -----------------------
       - name: Install gosec
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Run gosec (static analysis)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        run: |
-          set -e
-          $(go env GOPATH)/bin/gosec -no-fail -fmt=json -out=gosec-report.json ./...
+        run: $(go env GOPATH)/bin/gosec -no-fail -fmt=json -out=gosec-report.json ./...
 
-      - name: Upload gosec report artifact
+      - name: Upload gosec report
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: gosec-report
           path: gosec-report.json
 
-      - name: Trivy Scan (Go dependencies)
+      - name: Install govulncheck
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        run: govulncheck -json ./... > govuln-report.json || true
+
+      - name: Upload govulncheck report
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: govulncheck-report
+          path: govuln-report.json
+
+      - name: Trivy Scan (Go dependencies only)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
+          vuln-type: go
+          scanners: vuln
           format: json
           output: trivy-report.json
 
-      - name: Upload Trivy report artifact
+      - name: Upload Trivy report
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-report
           path: trivy-report.json
 
+      # -----------------------
+      # Build & Test
+      # -----------------------
       - name: Build CLI
         run: go build -trimpath -ldflags "-s -w" -o /tmp/freader ./cmd/freader
 
@@ -87,11 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           PKGS=$(go list ./... | grep -v /examples)
-          if [ -z "$PKGS" ]; then
-            echo "No packages to test"
-            exit 0
-          fi
-          go test -race -covermode=atomic -coverprofile="coverage.out" $PKGS
+          [ -n "$PKGS" ] && go test -race -covermode=atomic -coverprofile="coverage.out" $PKGS || echo "No packages to test"
 
       - name: Show coverage summary
         run: go tool cover -func=coverage.out | tail -n 1
@@ -103,26 +119,23 @@ jobs:
           name: coverage-${{ matrix.os }}
           path: coverage.out
 
-      - name: Extract coverage percentage (ubuntu-latest, push only)
+      # -----------------------
+      # Coverage badge (Ubuntu push only)
+      # -----------------------
+      - name: Extract coverage percentage
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         id: coverage
-        shell: bash
         run: |
-          set -euo pipefail
           LINE=$(go tool cover -func=coverage.out | tail -n 1)
-          # Expected format: total:\t(statements)\tNN.N%
           PCT=$(echo "$LINE" | awk '{print $3}')
           PCT_NUM=${PCT%%%}
-          # Determine badge color
           if [ "${PCT_NUM%.*}" -ge 80 ]; then COLOR=brightgreen; elif [ "${PCT_NUM%.*}" -ge 60 ]; then COLOR=yellow; else COLOR=red; fi
           echo "COVERAGE=$PCT_NUM" >> "$GITHUB_ENV"
           echo "BADGE_COLOR=$COLOR" >> "$GITHUB_ENV"
 
-      - name: Prepare Shields endpoint JSON (ubuntu-latest, push only)
+      - name: Prepare Shields JSON (coverage)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        shell: bash
         run: |
-          set -euo pipefail
           mkdir -p shields
           cat > shields/coverage.json <<EOF
           {
@@ -133,27 +146,29 @@ jobs:
           }
           EOF
 
-      - name: Publish Shields to gh-pages (ubuntu-latest, push only)
+      - name: Publish Shields (coverage)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
+        uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: shields
           destination_dir: shields
           keep_files: true
-          commit_message: "chore(ci): publish coverage endpoint (Shields)"
+          commit_message: "chore(ci): publish coverage badge"
 
-      - name: Download Trivy report artifact (ubuntu-latest, push only)
+      # -----------------------
+      # Trivy badge (Ubuntu push only)
+      # -----------------------
+      - name: Download Trivy report
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        uses: actions/download-artifact@v4
         with:
           name: trivy-report
           path: .
 
-      - name: Prepare Trivy Shields JSON (severity-based) (ubuntu-latest, push only)
+      - name: Prepare Shields JSON (trivy)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        shell: bash
         run: |
           mkdir -p shields
           CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-report.json)
@@ -173,13 +188,13 @@ jobs:
 
           echo "{\"schemaVersion\":1,\"label\":\"Trivy\",\"message\":\"$TOTAL\",\"color\":\"$COLOR\"}" > shields/trivy.json
 
-      - name: Publish Trivy badge to gh-pages (ubuntu-latest, push only)
+      - name: Publish Shields (trivy)
         if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
+        uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: shields
           destination_dir: shields
           keep_files: true
-          commit_message: "chore(ci): publish Trivy badge (Shields)"
+          commit_message: "chore(ci): publish Trivy badge"
