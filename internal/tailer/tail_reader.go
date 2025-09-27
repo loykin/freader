@@ -18,7 +18,8 @@ import (
 var bufferPool = sync.Pool{
 	New: func() interface{} {
 		// Start with a reasonable buffer size (4KB)
-		return make([]byte, 0, 4096)
+		buf := make([]byte, 0, 4096)
+		return &buf
 	},
 }
 
@@ -97,8 +98,8 @@ func (t *TailReader) open() error {
 
 	// Initialize buffer from pool if not already set
 	if t.buf == nil {
-		t.buf = bufferPool.Get().([]byte)
-		t.buf = t.buf[:0] // reset length but keep capacity
+		bufPtr := bufferPool.Get().(*[]byte)
+		t.buf = (*bufPtr)[:0] // reset length but keep capacity
 	}
 
 	return nil
@@ -316,7 +317,7 @@ func (t *TailReader) cleanup() {
 	if t.buf != nil {
 		// Reset the buffer length but keep capacity for reuse
 		t.buf = t.buf[:0]
-		bufferPool.Put(t.buf)
+		bufferPool.Put(&t.buf)
 		t.buf = nil
 	}
 }
