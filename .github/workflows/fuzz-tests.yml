@@ -80,7 +80,7 @@ jobs:
 
     - name: Upload test artifacts on failure
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-failure-${{ matrix.test_type.name }}-${{ github.run_number }}
         path: |
@@ -136,7 +136,7 @@ jobs:
         cat current_bench.txt
 
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: benchmark-results-${{ github.run_number }}
         path: current_bench.txt
