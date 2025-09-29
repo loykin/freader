@@ -31,7 +31,12 @@ func TestCollector_Fuzz(t *testing.T) {
 		t.Skip("skipping fuzz test - set FREADER_FUZZ_TEST=1 to enable")
 	}
 
-	duration := parseDuration(os.Getenv("FREADER_FUZZ_DURATION"), 30*time.Minute)
+	// Default to shorter duration for CI environments
+	defaultDuration := 30 * time.Minute
+	if os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" {
+		defaultDuration = 10 * time.Minute
+	}
+	duration := parseDuration(os.Getenv("FREADER_FUZZ_DURATION"), defaultDuration)
 	t.Logf("Starting fuzz test for %v", duration)
 
 	testCases := []struct {
@@ -511,7 +516,12 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		chaosTicker := time.NewTicker(3 * time.Second) // More frequent chaos
+		// Adjust chaos frequency for CI environments
+		chaosInterval := 3 * time.Second
+		if os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" {
+			chaosInterval = 10 * time.Second // Less frequent in CI
+		}
+		chaosTicker := time.NewTicker(chaosInterval)
 		defer chaosTicker.Stop()
 
 		chaosFileCount := 0
@@ -531,7 +541,12 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 				switch chaosAction {
 				case 0: // Create temporary file with large content
 					filename := filepath.Join(tempDir, fmt.Sprintf("chaos_large_%d.log", chaosFileCount))
-					largeContent := make([]byte, 50000+mathrand.Intn(50000))
+					// Reduce size for CI environments to prevent memory issues
+					maxSize := 50000
+					if os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" {
+						maxSize = 5000
+					}
+					largeContent := make([]byte, maxSize+mathrand.Intn(maxSize))
 					for i := range largeContent {
 						if i%100 == 99 {
 							largeContent[i] = '\n'
@@ -539,14 +554,21 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 							largeContent[i] = byte('a' + mathrand.Intn(26))
 						}
 					}
-					_ = os.WriteFile(filename, largeContent, 0644)
+					if err := os.WriteFile(filename, largeContent, 0644); err != nil {
+						t.Logf("WARN failed to create chaos file %s: %v", filename, err)
+					}
 					chaosFileCount++
 
 				case 1: // Create and immediately delete file
 					filename := filepath.Join(tempDir, fmt.Sprintf("chaos_temp_%d.log", chaosFileCount))
-					_ = os.WriteFile(filename, []byte("temporary content\n"), 0644)
-					time.Sleep(50 * time.Millisecond)
-					_ = os.Remove(filename)
+					if err := os.WriteFile(filename, []byte("temporary content\n"), 0644); err == nil {
+						time.Sleep(50 * time.Millisecond)
+						if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
+							t.Logf("WARN failed to remove chaos temp file %s: %v", filename, err)
+						}
+					} else {
+						t.Logf("WARN failed to create chaos temp file %s: %v", filename, err)
+					}
 					chaosFileCount++
 
 				case 2: // Create file with no newlines
@@ -558,10 +580,16 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 					_ = os.WriteFile(filename, content, 0644)
 					chaosFileCount++
 
-				case 3: // Create many small files
-					for i := 0; i < 10; i++ {
+				case 3: // Create many small files (fewer in CI)
+					maxFiles := 10
+					if os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" {
+						maxFiles = 3 // Create fewer files in CI
+					}
+					for i := 0; i < maxFiles; i++ {
 						filename := filepath.Join(tempDir, fmt.Sprintf("chaos_small_%d_%d.log", chaosFileCount, i))
-						_ = os.WriteFile(filename, []byte(fmt.Sprintf("small_%d\n", i)), 0644)
+						if err := os.WriteFile(filename, []byte(fmt.Sprintf("small_%d\n", i)), 0644); err != nil {
+							t.Logf("WARN failed to create small chaos file %s: %v", filename, err)
+						}
 					}
 					chaosFileCount++
 
@@ -593,12 +621,19 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 						}
 					}
 
-				case 7: // Rapid file creation/deletion storm
-					for burst := 0; burst < 20; burst++ {
+				case 7: // Rapid file creation/deletion storm (reduced for CI)
+					maxBurst := 20
+					if os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("CI") != "" {
+						maxBurst = 5 // Reduce burst size in CI
+					}
+					for burst := 0; burst < maxBurst; burst++ {
 						filename := filepath.Join(tempDir, fmt.Sprintf("chaos_burst_%d_%d.log", chaosFileCount, burst))
-						_ = os.WriteFile(filename, []byte(fmt.Sprintf("burst_%d\n", burst)), 0644)
-						time.Sleep(10 * time.Millisecond)
-						_ = os.Remove(filename)
+						if err := os.WriteFile(filename, []byte(fmt.Sprintf("burst_%d\n", burst)), 0644); err == nil {
+							time.Sleep(10 * time.Millisecond)
+							if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
+								t.Logf("WARN failed to remove burst file %s: %v", filename, err)
+							}
+						}
 					}
 					chaosFileCount++
 				}

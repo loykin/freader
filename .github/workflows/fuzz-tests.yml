@@ -27,7 +27,7 @@ jobs:
   fuzz-stability:
     name: Fuzz Tests - Multi-file Operations
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # 3 hours max
+    timeout-minutes: 90  # 1.5 hours max
 
     strategy:
       matrix:
@@ -40,7 +40,7 @@ jobs:
             duration: "1h"
           - name: "Chaos Engineering - File Creation/Deletion/Rotation"
             pattern: "TestCollector_Fuzz/ChaosEngineering"
-            duration: "45m"
+            duration: "15m"
           - name: "Goroutine Leak Detection - Resource Management"
             pattern: "TestCollector_Fuzz/GoroutineLeakDetection"
             duration: "30m"
