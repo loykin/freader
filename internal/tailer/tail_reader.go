@@ -59,11 +59,23 @@ func (t *TailReader) open() error {
 	case watcher.FingerprintStrategyChecksum:
 		fileId, err = file_tracker.GetFileFingerprint(file, fileInfo.FingerprintSize)
 		if err != nil {
+			// If file is too small for fingerprinting, it should have been skipped by watcher
+			// This can happen if file grew after initial scan
+			if file_tracker.IsFileSizeTooSmall(err) {
+				slog.Debug("file too small for fingerprinting",
+					"path", fileInfo.Path, "fileId", t.FileId, "error", err)
+			}
 			return err
 		}
 	case watcher.FingerprintStrategyChecksumSeparator:
 		fileId, err = file_tracker.GetFileFingerprintUntilNSeparators(file, t.Separator, int(fileInfo.FingerprintSize))
 		if err != nil {
+			// If file doesn't have enough separators, it should have been skipped by watcher
+			// This can happen if file content changed after initial scan
+			if file_tracker.IsNotEnoughSeparators(err) {
+				slog.Debug("file has insufficient separators",
+					"path", fileInfo.Path, "fileId", t.FileId, "error", err)
+			}
 			return err
 		}
 	case watcher.FingerprintStrategyDeviceAndInode:
@@ -81,10 +93,16 @@ func (t *TailReader) open() error {
 	}
 
 	if fileId != t.FileId {
-		slog.Warn("file id mismatch",
-			"path", fileInfo.Path, "fileId", fileId, "expected", t.FileId)
+		// File content has changed (rotation, truncation, or overwrite)
+		// This is a normal scenario in dynamic environments
+		slog.Debug("file content changed, fingerprint mismatch",
+			"path", fileInfo.Path, "current_fingerprint", fileId, "tracked_fingerprint", t.FileId)
 		_ = file.Close()
-		return errors.New("file id mismatch(path:" + fileInfo.Path + ": " + fileId + " != " + t.FileId)
+		return &FileFingerprintMismatchError{
+			Path:                fileInfo.Path,
+			ExpectedFingerprint: t.FileId,
+			ActualFingerprint:   fileId,
+		}
 	}
 
 	_, err = file.Seek(t.Offset, io.SeekStart)

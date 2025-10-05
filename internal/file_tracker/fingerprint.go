@@ -22,13 +22,16 @@ func GetFileFingerprintFromPath(path string, maxBytes int64) (string, error) {
 
 // GetFileFingerprint computes SHA-256 hash of a file's content, up to a specified maximum number of bytes.
 // It takes a file path and a maximum byte limit, returning the hash as a hexadecimal string or an error.
-// Returns an error if the file size is smaller than the specified limit or other issues occur during processing.
+// If the file size is smaller than maxBytes, it returns an error to indicate insufficient content for fingerprinting.
+// This is intentional to ensure consistent fingerprinting behavior (e.g., avoiding false matches on partial content).
 func GetFileFingerprint(file *os.File, maxBytes int64) (string, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return "", err
 	}
 
+	// Return error only if file is smaller than required minimum
+	// This allows the caller (watcher) to skip the file gracefully
 	if info.Size() < maxBytes {
 		return "", &FileSizeTooSmallError{
 			Expected: maxBytes,

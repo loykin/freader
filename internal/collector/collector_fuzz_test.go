@@ -206,13 +206,15 @@ func testFuzzContinuousLoad(t *testing.T, duration time.Duration) {
 	// Resource monitoring and progress reporting
 	progressTicker := time.NewTicker(5 * time.Minute)
 	resourceTicker := time.NewTicker(30 * time.Second)
+	durationTimer := time.NewTimer(duration)
 	defer progressTicker.Stop()
 	defer resourceTicker.Stop()
+	defer durationTimer.Stop()
 
 	startTime := time.Now()
 	for {
 		select {
-		case <-time.After(duration):
+		case <-durationTimer.C:
 			goto cleanup
 		case <-resourceTicker.C:
 			monitor.Update()
@@ -286,7 +288,7 @@ func testFuzzMemoryStability(t *testing.T, duration time.Duration) {
 		WorkerCount:         2,
 		Separator:           "\n",
 		FingerprintStrategy: watcher.FingerprintStrategyChecksum,
-		FingerprintSize:     1024,
+		FingerprintSize:     512, // Reduced to handle smaller files in fuzz tests
 		OnLineFunc: func(line string) {
 			atomic.AddInt64(&linesCollected, 1)
 		},
@@ -354,12 +356,15 @@ func testFuzzMemoryStability(t *testing.T, duration time.Duration) {
 		}
 	}()
 
+	durationTimer := time.NewTimer(duration)
+	defer durationTimer.Stop()
+
 	startTime := time.Now()
 	lastGCCount := baselineMemStats.NumGC
 
 	for {
 		select {
-		case <-time.After(duration):
+		case <-durationTimer.C:
 			goto cleanup
 		case <-memoryTicker.C:
 			elapsed := time.Since(startTime)
@@ -468,7 +473,7 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 		WorkerCount:         4,
 		Separator:           "\n",
 		FingerprintStrategy: watcher.FingerprintStrategyChecksum,
-		FingerprintSize:     1024,
+		FingerprintSize:     512, // Reduced to handle smaller files in fuzz tests
 		OnLineFunc: func(line string) {
 			atomic.AddInt64(&linesCollected, 1)
 		},
@@ -653,12 +658,14 @@ func testFuzzChaosEngineering(t *testing.T, duration time.Duration) {
 	defer progressTicker.Stop()
 	defer adaptiveTicker.Stop()
 
-	// Use timeout channel instead of time.After in select
-	timeout := time.After(duration)
+	// Use timer instead of time.After to properly handle timeout
+	durationTimer := time.NewTimer(duration)
+	defer durationTimer.Stop()
+
 	startTime := time.Now()
 	for {
 		select {
-		case <-timeout:
+		case <-durationTimer.C:
 			goto cleanup
 		case <-adaptiveTicker.C:
 			// Update resource monitoring for adaptive behavior

@@ -73,9 +73,23 @@ func (c *Collector) worker() {
 			if os.IsNotExist(err) {
 				slog.Debug("file not found", "file", fileTail.FileId, "error", err)
 			} else if err != nil {
-				metrics.IncReadErrors()
-				slog.Error("failed to read file", "file", fileTail.FileId, "error", err)
-			} else if err == nil {
+				// Check if this is a file size or separator issue (expected conditions to skip)
+				if file_tracker.IsFileSizeTooSmall(err) || file_tracker.IsNotEnoughSeparators(err) {
+					slog.Debug("file not ready for reading", "file", fileTail.FileId, "error", err)
+					// Remove from scheduler as file doesn't meet fingerprinting requirements
+					c.scheduler.Remove(fileTail.FileId)
+					c.fileManager.Remove(fileTail.FileId)
+				} else if tailer.IsFileFingerprintMismatch(err) {
+					// File content changed (rotation, truncation, overwrite) - this is normal
+					slog.Debug("file content changed, removing stale entry", "file", fileTail.FileId, "error", err)
+					c.scheduler.Remove(fileTail.FileId)
+					c.fileManager.Remove(fileTail.FileId)
+					// Watcher will re-add the file with new fingerprint on next scan
+				} else {
+					metrics.IncReadErrors()
+					slog.Error("failed to read file", "file", fileTail.FileId, "error", err)
+				}
+			} else {
 				// Update the offset in the FileTracker
 				c.fileManager.UpdateOffset(fileTail.FileId, fileTail.Offset)
 
