@@ -770,9 +770,16 @@ func testFuzzGoroutineLeakDetection(t *testing.T, duration time.Duration) {
 		},
 	}
 
-	// Test multiple collector start/stop cycles
+	// Test multiple collector start/stop cycles with reasonable duration limits
 	cycles := 10
 	cycleDuration := duration / time.Duration(cycles)
+
+	// Cap individual cycle duration to prevent extremely long cycles
+	maxCycleDuration := 2 * time.Minute
+	if cycleDuration > maxCycleDuration {
+		cycleDuration = maxCycleDuration
+		t.Logf("Capping cycle duration to %v (was %v)", maxCycleDuration, duration/time.Duration(cycles))
+	}
 
 	for cycle := 0; cycle < cycles; cycle++ {
 		t.Logf("Starting collector cycle %d/%d", cycle+1, cycles)
@@ -791,7 +798,20 @@ func testFuzzGoroutineLeakDetection(t *testing.T, duration time.Duration) {
 
 		time.Sleep(cycleDuration)
 
-		collector.Stop()
+		// Add timeout for collector stop to prevent infinite hanging
+		stopDone := make(chan struct{})
+		go func() {
+			collector.Stop()
+			close(stopDone)
+		}()
+
+		select {
+		case <-stopDone:
+			// Stop completed successfully
+		case <-time.After(30 * time.Second):
+			t.Errorf("Collector.Stop() timed out after 30 seconds in cycle %d", cycle+1)
+			// Force continue to next cycle instead of hanging forever
+		}
 
 		// Check goroutine count
 		currentGoroutines := countGoroutines()
