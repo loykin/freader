@@ -113,7 +113,10 @@ func testFuzzContinuousLoad(t *testing.T, duration time.Duration) {
 	tempDir := t.TempDir()
 	monitor := NewResourceMonitor()
 
-	var collected []string
+	// Use bounded circular buffer instead of unbounded slice
+	const maxCollectedLines = 10000
+	var collected = make([]string, 0, maxCollectedLines)
+	var collectedIndex int
 	var mu sync.Mutex
 	var linesWritten, linesCollected int64
 
@@ -126,7 +129,13 @@ func testFuzzContinuousLoad(t *testing.T, duration time.Duration) {
 		FingerprintSize:     1024,
 		OnLineFunc: func(line string) {
 			mu.Lock()
-			collected = append(collected, line)
+			if len(collected) < maxCollectedLines {
+				collected = append(collected, line)
+			} else {
+				// Circular buffer: overwrite oldest entries
+				collected[collectedIndex] = line
+				collectedIndex = (collectedIndex + 1) % maxCollectedLines
+			}
 			mu.Unlock()
 			atomic.AddInt64(&linesCollected, 1)
 		},
