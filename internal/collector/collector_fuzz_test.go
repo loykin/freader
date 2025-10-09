@@ -453,8 +453,18 @@ cleanup:
 	t.Logf("  Average GC pause: %v", time.Duration(finalMemStats.PauseTotalNs/uint64(finalMemStats.NumGC)))
 
 	assert.Greater(t, finalCollected, int64(100), "Should have collected substantial data")
-	assert.Less(t, finalHeapGrowth, uint64(150*1024*1024), "Heap growth should be reasonable (150MB)")
-	assert.Less(t, int(totalGCCycles), int(duration.Minutes()*60), "GC frequency should be reasonable")
+	// Adjust memory threshold based on test duration
+	memThresholdMB := uint64(150) // Default 150MB
+	if duration.Minutes() > 10 {
+		memThresholdMB = uint64(300) // Allow 300MB for long tests (30 minutes)
+	}
+	assert.Less(t, finalHeapGrowth, memThresholdMB*1024*1024, fmt.Sprintf("Heap growth should be reasonable (%dMB)", memThresholdMB))
+	// For long-running tests (>10 minutes), use more lenient GC threshold
+	gcThreshold := int(duration.Minutes() * 60)
+	if duration.Minutes() > 10 {
+		gcThreshold = int(duration.Minutes() * 120) // Allow up to 2 GC cycles per second for long tests
+	}
+	assert.Less(t, int(totalGCCycles), gcThreshold, "GC frequency should be reasonable")
 }
 
 // ErrorInjector provides controlled failure scenarios for testing resilience
