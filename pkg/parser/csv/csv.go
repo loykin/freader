@@ -163,8 +163,12 @@ func (p *Parser) detectType(value string) interface{} {
 
 	// Integer
 	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
-		// Check if it fits in int
-		if intVal >= int64(int(^uint(0)>>1)*-1) && intVal <= int64(int(^uint(0)>>1)) {
+		// Check if it fits in int (safe bounds check)
+		const (
+			intMax = int64(^uint(0) >> 1) // Maximum positive int value
+			intMin = -intMax - 1          // Minimum negative int value
+		)
+		if intVal >= intMin && intVal <= intMax {
 			return int(intVal)
 		}
 		return intVal
