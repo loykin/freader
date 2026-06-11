@@ -1,6 +1,5 @@
 # freader
 
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/loykin/freader/gh-pages/shields/coverage.json&cacheSeconds=60)](https://github.com/loykin/freader/blob/gh-pages/shields/coverage.json)
 [![Go Report Card](https://goreportcard.com/badge/github.com/loykin/freader)](https://goreportcard.com/report/github.com/loykin/freader)
 ![CodeQL](https://github.com/loykin/freader/actions/workflows/codeql.yml/badge.svg)
 [![Trivy](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/loykin/freader/gh-pages/shields/trivy.json&cacheSeconds=60)](https://raw.githubusercontent.com/loykin/freader/gh-pages/shields/trivy.json)
