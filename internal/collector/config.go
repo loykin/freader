@@ -7,6 +7,13 @@ import (
 	"github.com/loykin/freader/internal/watcher"
 )
 
+// LineEvent contains one collected line and metadata about where it came from.
+type LineEvent struct {
+	Line string
+	File string
+	Ts   time.Time
+}
+
 type Config struct {
 	WorkerCount         int
 	Separator           string
@@ -16,6 +23,7 @@ type Config struct {
 	Include             []string
 	Exclude             []string
 	OnLineFunc          func(line string)
+	OnEventFunc         func(event LineEvent)
 	DBPath              string
 	StoreOffsets        bool
 	// Multiline optionally configures the multiline aggregator used by tailers.

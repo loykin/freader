@@ -194,6 +194,69 @@ loop:
 	collector.Stop()
 }
 
+func TestCollector_OnEventFuncReceivesMetadataAndTakesPrecedence(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip inode-based collector tests on Windows")
+	}
+
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "event.txt")
+	err := os.WriteFile(testFile, []byte("event-line\n"), 0644)
+	assert.NoError(t, err)
+
+	var events []LineEvent
+	var lineFuncCalled bool
+	var mu sync.Mutex
+
+	cfg := Config{
+		Include:             []string{tempDir},
+		PollInterval:        100 * time.Millisecond,
+		WorkerCount:         1,
+		Separator:           "\n",
+		FingerprintStrategy: watcher.FingerprintStrategyDeviceAndInode,
+		OnLineFunc: func(line string) {
+			mu.Lock()
+			defer mu.Unlock()
+			lineFuncCalled = true
+		},
+		OnEventFunc: func(event LineEvent) {
+			mu.Lock()
+			defer mu.Unlock()
+			events = append(events, event)
+		},
+	}
+
+	collector, err := NewCollector(cfg)
+	assert.NoError(t, err)
+
+	collector.Start()
+	defer collector.Stop()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		mu.Lock()
+		count := len(events)
+		mu.Unlock()
+		if count > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for OnEventFunc")
+		default:
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.False(t, lineFuncCalled)
+	assert.Equal(t, "event-line", events[0].Line)
+	assert.Equal(t, testFile, events[0].File)
+	assert.Equal(t, time.UTC, events[0].Ts.Location())
+	assert.False(t, events[0].Ts.IsZero())
+}
+
 func TestCollector_FileRemoval(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skip inode-based collector tests on Windows")

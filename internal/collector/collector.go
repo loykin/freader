@@ -23,6 +23,7 @@ type Collector struct {
 	scheduler   *TailScheduler
 	mu          sync.Mutex
 	onLineFunc  func(line string)
+	onEventFunc func(event LineEvent)
 	stopCh      chan struct{}
 	workerWg    sync.WaitGroup
 }
@@ -62,7 +63,17 @@ func (c *Collector) worker() {
 			err := fileTail.ReadOnce(func(line string) {
 				c.mu.Lock()
 				defer c.mu.Unlock()
-				if c.onLineFunc != nil {
+				if c.onEventFunc != nil {
+					file := ""
+					if fileInfo := c.fileManager.Get(fileTail.FileId); fileInfo != nil {
+						file = fileInfo.Path
+					}
+					c.onEventFunc(LineEvent{
+						Line: line,
+						File: file,
+						Ts:   time.Now().UTC(),
+					})
+				} else if c.onLineFunc != nil {
 					c.onLineFunc(line)
 				}
 				// Metrics: count processed line and bytes emitted (approximate)
@@ -147,6 +158,7 @@ func NewCollector(cfg Config) (*Collector, error) {
 	config.Exclude = cfg.Exclude
 
 	c.onLineFunc = cfg.OnLineFunc
+	c.onEventFunc = cfg.OnEventFunc
 
 	c.watcher, err = watcher.NewWatcher(
 		config,

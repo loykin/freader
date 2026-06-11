@@ -21,6 +21,9 @@ import (
 // This is a type alias, so it's fully compatible with the underlying type.
 type Config = collector.Config
 
+// LineEvent re-exports collector.LineEvent for event callbacks.
+type LineEvent = collector.LineEvent
+
 // Collector re-exports collector.Collector so callers can keep the concrete type
 // when using the root-level constructor.
 type Collector = collector.Collector
