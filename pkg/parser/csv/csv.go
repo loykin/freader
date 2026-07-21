@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -164,11 +165,7 @@ func (p *Parser) detectType(value string) interface{} {
 	// Integer
 	if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
 		// Check if it fits in int (safe bounds check)
-		const (
-			intMax = int64(^uint(0) >> 1) // Maximum positive int value
-			intMin = -intMax - 1          // Minimum negative int value
-		)
-		if intVal >= intMin && intVal <= intMax {
+		if intVal >= math.MinInt && intVal <= math.MaxInt {
 			return int(intVal)
 		}
 		return intVal
